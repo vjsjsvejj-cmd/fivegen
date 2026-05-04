@@ -57,7 +57,7 @@ def temporary_file(file_path):
         except Exception as e:
             logger.warning(f"清理临时文件失败: {e}")
 
-app = FastAPI(title="Five Gen 2.4.1", version="2.4.1")
+app = FastAPI(title="Five Gen 2.4.3", version="2.4.3")
 
 # 创建静态文件目录
 static_dir = os.path.join(os.path.dirname(__file__), "static")
@@ -147,7 +147,7 @@ else:
 
 @app.get("/")
 async def root():
-    return {"message": "Five Gen 2.4.1 API", "status": "online"}
+    return {"message": "Five Gen 2.4.3 API", "status": "online"}
 
 
 @app.get("/health")

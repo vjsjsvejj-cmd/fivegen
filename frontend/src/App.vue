@@ -569,7 +569,7 @@ onUnmounted(() => {
     <template v-else>
       <header class="app-header">
         <div class="header-left">
-          <h1 class="logo">🎨 Five Gen 2.4.1</h1>
+          <h1 class="logo">🎨 Five Gen 2.4.3</h1>
           <div class="tab-bar">
             <button 
               :class="['tab-btn', { active: activeTab === 'image' }]"

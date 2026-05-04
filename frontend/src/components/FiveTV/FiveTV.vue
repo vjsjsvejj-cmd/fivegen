@@ -138,7 +138,7 @@ const saveProject = () => {
     nodes: JSON.parse(JSON.stringify(nodes.value)),
     edges: JSON.parse(JSON.stringify(edges.value)),
     savedAt: new Date().toISOString(),
-    version: '2.4.1'
+    version: '2.4.3'
   }
   const projects = getStoredProjects()
   const existingIndex = projects.findIndex(p => p.name === projectData.name)

@@ -1,12 +1,12 @@
 
 
-#  Five Gen 2.4 - AI 图像与视频生成平台
+#  Five Gen 2.4.3 - AI 图像与视频生成平台
 
 一个基于 FastAPI + Vue 3 的 AI 图像和视频生成协作平台，内置可视化节点编辑器（Canvas），支持拖拽式连接创作，提供直观的工作流设计体验。
 
 ## 📋 版本特性
 
-**Five Gen 2.4** - 可视化节点编辑器版（2026-05-04）
+**Five Gen 2.4.3** - 可视化节点编辑器版（2026-05-05）
 
 新增功能：
 - 📺 **Canvas 可视化节点编辑器** - 全新拖拽式连接创作方式
@@ -267,6 +267,21 @@ TOS_SECRET_KEY=your-key-here
 将对应备份目录内容复制到 `e:\FiveGen` 即可完整恢复。
 
 ## 📋 更新日志
+
+### v2.4.3 (2026-05-05) - Five Gen 2.4.3
+- ✅ 项目正式更名为 Five Gen 2.4.3
+- ✅ 后端 CORS 安全配置（默认值从 * 改为 http://localhost:3000）
+- ✅ 后端同步阻塞修复（asyncio.to_thread 包装 requests 调用）
+- ✅ JSON 文件原子写入（tempfile + os.replace 防止数据损坏）
+- ✅ 临时上传文件自动清理
+- ✅ 前端 XSS 防护增强（escapeHtml 覆盖单引号）
+- ✅ Blob URL 内存泄漏修复（VoiceCloneWorkspace, InversionModal）
+- ✅ DOM 事件监听器泄漏修复（useResize, PromptHelper）
+- ✅ Socket 事件监听器泄漏修复（useSocketEvents, useChat, useTemplates）
+- ✅ ResultGrid 调试输出清理和 key 重复修复
+- ✅ ARIA 无障碍属性添加（Modal, ToastContainer, ConfirmDialog, UploadArea, InversionModal）
+- ✅ Vite 端口固定配置（strictPort: true）
+- ✅ 提取共享工具函数和样式
 
 ### v2.4 (2026-05-04) - Five Gen 2.4
 - ✅ 项目正式更名为 Five Gen 2.4
