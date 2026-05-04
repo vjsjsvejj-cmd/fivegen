@@ -1,0 +1,111 @@
+地址：hotst国内直连：https://grsai.dakka.com.cn
+接口：/v1/draw/completions
+
+请求方式：POST
+
+{
+  "Content-Type": "application/json",
+  "Authorization": "Bearer apikey"
+}
+
+{
+  "model": "gpt-image-2",
+  "prompt": "描述您想要生成的图像内容的提示词",
+  "aspectRatio": "1:1",
+  "urls": [
+    "https://example.com/example1.png",
+    "https://example.com/example2.png"
+  ],
+  "webHook": "https://example.com/callback",
+  "shutProgress": false
+}
+
+model（必填）
+类型: string
+示例: "gpt-image-2"
+描述:
+支持模型:
+gpt-image-2
+prompt（必填）
+类型: string
+示例: "一只可爱的猫咪在草地上玩耍"
+描述:
+提示词
+aspectRatio（选填）
+类型: string
+示例: "1:1"
+描述:
+输出图像比例
+可选："auto"
+"1:1"
+"16:9"
+"9:16"
+"4:3"
+"3:4"
+urls（选填）
+类型: string[]
+示例: ["https://example.com/image1.jpg", "https://example.com/image2.jpg"]
+描述:
+参考图片的URL，支持多张图片
+
+
+{
+  "id": "xxxxx",
+  "progress": 100,
+  "results": [
+    {
+      "url": "https://example.com/example.png"
+    }
+  ],
+  "status": "succeeded",
+  "failure_reason": "",
+  "error": ""
+}
+
+id
+类型: string
+示例: "fb3b7d12-e7f3-4eda-b253-327a415a65b1"
+描述:
+Id (webHook回调可以用该id来对应数据)
+url
+类型: string
+示例: "https://example.com/generated-image.jpg"
+描述:
+(旧参数，不会废弃，默认为results中第一个结果的url)
+结果图片的URL（有效期为2小时）
+progress
+类型: number
+示例: 100
+描述:
+任务进度,0~100
+results
+类型: object[]
+描述:
+图片生成结果
+url: 图片链接（有效期为2小时）
+status
+类型: string
+示例: "succeeded"
+描述:
+任务状态
+"running": 进行中
+"succeeded": 成功
+"failed": 失败
+failure_reason
+类型: string
+示例: "error"
+描述:
+失败原因
+"output_moderation": 输出违规
+"input_moderation": 输入违规
+"error": 其他错误
+------
+当生成失败时，会返还积分
+提示：当触发"error"时，可尝试重新提交任务来确保系统稳定性。
+error
+类型: string
+示例: "Invalid input parameters"
+描述:
+失败详细信息
+
+

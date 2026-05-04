@@ -1,0 +1,18 @@
+# FastAPI & ASGI Server
+fastapi>=0.100.0,<1.0.0
+uvicorn[standard]>=0.20.0,<1.0.0
+
+# WebSocket
+python-socketio>=5.0.0,<6.0.0
+
+# Object Storage
+tos>=2.0.0,<3.0.0
+
+# Configuration
+python-dotenv>=1.0.0,<2.0.0
+
+# File Upload
+python-multipart>=0.0.5,<1.0.0
+
+# HTTP Requests
+requests>=2.28.0,<3.0.0

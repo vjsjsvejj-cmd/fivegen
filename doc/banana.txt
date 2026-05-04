@@ -1,0 +1,135 @@
+地址：hotst国内直连：https://grsai.dakka.com.cn
+接口：/v1/draw/nano-banana
+
+---
+
+请求头：
+{
+  "Content-Type": "application/json",
+  "Authorization": "Bearer apikey"
+}
+
+---
+
+请求参数：
+{
+  "model": "nano-banana-fast",
+  "prompt": "提示词",
+  "aspectRatio": "auto",
+  "imageSize": "1K",
+  "urls": [
+    "https://example.com/example.png"
+  ],
+  "webHook": "https://example.com/callback",
+  "shutProgress": false
+}
+
+model可选：
+nano-banana-2
+nano-banana-2-cl
+nano-banana-2-4k-cl
+nano-banana-pro
+nano-banana-pro-cl
+nano-banana-pro-4k-vip
+
+请求参数说明：
+urls（选填）
+类型: array
+示例: ["https://example.com/example.png"]
+描述:
+参考图URL or Base64
+
+prompt（必填）
+类型: string
+示例: "一只可爱的猫咪在草地上玩耍"
+描述:
+提示词
+
+aspectRatio（选填）
+类型: string
+示例: "auto"
+描述:
+输出图像比例,支持的比例:
+auto
+1:1
+16:9
+9:16
+4:3
+3:4
+默认 auto
+
+
+imageSize（选填）
+类型: string
+示例: "1K"
+描述:
+支持模型：
+nano-banana-2
+nano-banana-2-cl(只支持1k，2k)
+nano-banana-2-4k-cl(只支持4k)
+nano-banana-pro
+nano-banana-pro-cl
+nano-banana-pro-4k-vip(只支持4k)
+输出图像大小,支持的大小:
+1K
+2K
+4K
+默认 1K
+注意：分辨率越高，生成时间越长
+
+---
+
+响应参数（json）
+{
+  "id": "xxxxx",
+  "results": [
+    {
+      "url": "https://example.com/example.png",
+      "content": "这是一只可爱的猫咪在草地上玩耍"
+    }
+  ],
+  "progress": 100,
+  "status": "succeeded",
+  "failure_reason": "",
+  "error": ""
+}
+响应参数说明
+id
+类型: string
+示例: "f44bcf50-f2d0-4c26-a467-26f2014a771b"
+描述:
+Id (webHook回调可以用该id来对应数据)
+results
+类型: array
+示例: [{"url": "https://example.com/generated-image.jpg", "content": "这是一只可爱的猫咪在草地上玩耍"}]
+描述:
+结果
+content: 回复内容
+url: 图片URL(有效期为2小时)
+progress
+类型: number
+示例: 100
+描述:
+任务进度,0~100
+status
+类型: string
+示例: "succeeded"
+描述:
+任务状态
+"running": 进行中
+"succeeded": 成功
+"failed": 失败
+failure_reason
+类型: string
+示例: "error"
+描述:
+失败原因
+"output_moderation": 输出违规
+"input_moderation": 输入违规
+"error": 其他错误
+提示：当触发"error"时，可尝试重新提交任务来确保系统稳定性。
+error
+类型: string
+示例: "Invalid input parameters"
+描述:
+失败详细信息
