@@ -3,6 +3,10 @@ import { ref, computed, onMounted, onUnmounted, nextTick, inject } from 'vue'
 import UploadArea from './UploadArea.vue'
 import Modal from './Modal.vue'
 import PromptHelper from './PromptHelper.vue'
+import { formatPrompt } from '../utils/prompt.js'
+import { usePromptInput } from '../composables/usePromptInput.js'
+import { VIDEO_MODELS, VIDEO_ASPECT_RATIOS as ASPECT_RATIOS, VIDEO_RESOLUTION_CONFIG, FRAME_RATE } from '../config/models.js'
+import { createModelChangeHandler } from '../utils/workspace-helpers.js'
 
 const promptTextarea = ref(null)
 
@@ -37,20 +41,6 @@ const handlePromptLabelClick = () => {
 
 // 注入模板数据
 const templates = inject('templates', ref([]))
-const showTemplateSuggestions = ref(false)
-const templateSearchTerm = ref('')
-
-// 过滤后的模板列表
-const filteredTemplates = computed(() => {
-  if (!templateSearchTerm.value) {
-    return templates.value
-  }
-  const searchTerm = templateSearchTerm.value.toLowerCase()
-  return templates.value.filter(template => 
-    template.name.toLowerCase().includes(searchTerm) || 
-    template.content.toLowerCase().includes(searchTerm)
-  )
-})
 
 const props = defineProps({
   roomId: { type: String, default: '' },
@@ -59,46 +49,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['generate'])
-
-const VIDEO_MODELS = {
-  "seedance-2-0": { 
-    name: "Seedance 2.0", 
-    resolutions: ["480p", "720p", "1080p"],
-    default_resolution: "720p",
-    durations: ["4s", "5s", "6s", "7s", "8s", "9s", "10s", "11s", "12s", "13s", "14s", "15s"]
-  }
-}
-
-const ASPECT_RATIOS = ["16:9", "9:16", "1:1", "3:4", "4:3", "21:9"]
-
-const VIDEO_RESOLUTION_CONFIG = {
-  "480p": {
-    "16:9": { width: 864, height: 496 },
-    "4:3": { width: 752, height: 560 },
-    "1:1": { width: 640, height: 640 },
-    "3:4": { width: 560, height: 752 },
-    "9:16": { width: 496, height: 864 },
-    "21:9": { width: 992, height: 432 }
-  },
-  "720p": {
-    "16:9": { width: 1280, height: 720 },
-    "4:3": { width: 1112, height: 834 },
-    "1:1": { width: 960, height: 960 },
-    "3:4": { width: 834, height: 1112 },
-    "9:16": { width: 720, height: 1280 },
-    "21:9": { width: 1470, height: 630 }
-  },
-  "1080p": {
-    "16:9": { width: 1920, height: 1080 },
-    "4:3": { width: 1664, height: 1248 },
-    "1:1": { width: 1440, height: 1440 },
-    "3:4": { width: 1248, height: 1664 },
-    "9:16": { width: 1080, height: 1920 },
-    "21:9": { width: 2206, height: 946 }
-  }
-}
-
-const FRAME_RATE = 24
 
 const calculateVideoTokens = () => {
   const outputDuration = parseInt(duration.value.replace('s', ''))
@@ -144,7 +94,6 @@ const multimodalFiles = ref([])
 const modalVisible = ref(false)
 const modalType = ref('video')
 const modalUrl = ref('')
-const showAtSuggestions = ref(false)
 
 const availableResolutions = computed(() => {
   const model = VIDEO_MODELS[selectedModel.value]
@@ -187,155 +136,20 @@ const atFilesList = computed(() => {
   }))
 })
 
-const handlePromptInput = (e) => {
-  const value = e.target.value
-  // 检查是否以@结尾
-  const hasAt = value.endsWith('@')
-  if (hasAt && atFilesList.value.length > 0) {
-    showAtSuggestions.value = true
-    showTemplateSuggestions.value = false
-    templateSearchTerm.value = ''
-  } else {
-    showAtSuggestions.value = false
-  }
-  
-  // 检查 # 号和搜索词
-  const lastHashIndex = value.lastIndexOf('#')
-  if (lastHashIndex !== -1) {
-    // 有 # 号，提取搜索词
-    const searchTerm = value.substring(lastHashIndex + 1).trim()
-    templateSearchTerm.value = searchTerm
-    showTemplateSuggestions.value = templates.value.length > 0
-    showAtSuggestions.value = false
-  } else if (!hasAt) {
-    // 没有 # 号，关闭模板建议
-    showTemplateSuggestions.value = false
-    templateSearchTerm.value = ''
-  }
-}
+const {
+  showAtSuggestions,
+  showTemplateSuggestions,
+  templateSearchTerm,
+  filteredTemplates,
+  handlePromptInput,
+  handleKeydown,
+  selectAtFile,
+  selectTemplate,
+  buildPromptMapping,
+  replacePromptCodes,
+} = usePromptInput({ prompt, promptTextarea, atFilesList, templates })
 
-const handleKeydown = (e) => {
-  // 按ESC键关闭建议框
-  if (e.key === 'Escape') {
-    showAtSuggestions.value = false
-    showTemplateSuggestions.value = false
-  }
-  // 按Enter键关闭建议框（如果有显示）
-  if (e.key === 'Enter' && (showAtSuggestions.value || showTemplateSuggestions.value)) {
-    showAtSuggestions.value = false
-    showTemplateSuggestions.value = false
-  }
-  // 检查是否按下了@键
-  if (e.key === '@' && atFilesList.value.length > 0) {
-    setTimeout(() => {
-      showAtSuggestions.value = true
-      showTemplateSuggestions.value = false
-    }, 10)
-  }
-  // 检查是否按下了#键
-  if (e.key === '#' && templates.value.length > 0) {
-    setTimeout(() => {
-      showTemplateSuggestions.value = true
-      showAtSuggestions.value = false
-    }, 10)
-  }
-}
-
-const selectAtFile = (file) => {
-  showAtSuggestions.value = false
-  // 获取当前光标位置（这才是正确的@位置）
-  const currentCursorPos = promptTextarea.value?.selectionStart || prompt.value.length
-  const atIndex = prompt.value.lastIndexOf('@', currentCursorPos)
-  
-  // 获取该文件在列表中的 index
-  const fileIndex = atFilesList.value.findIndex(f => f.id === file.id)
-  let shortCode = file.shortCode
-  if (!shortCode) {
-    if (file.fileType === 'video') {
-      shortCode = `视频${fileIndex + 1}`
-    } else if (file.fileType === 'audio') {
-      shortCode = `音频${fileIndex + 1}`
-    } else {
-      shortCode = `图片${fileIndex + 1}`
-    }
-  }
-  
-  // 保留@前面的内容、替换@部分、保留@后面的内容
-  const before = prompt.value.substring(0, atIndex)
-  const after = prompt.value.substring(currentCursorPos) // 保留光标后面的内容
-  prompt.value = before + '@' + shortCode + ' ' + after
-  
-  // 在下一帧聚焦到 textarea 并设置光标位置到插入的位置后面
-  nextTick(() => {
-    if (promptTextarea.value) {
-      promptTextarea.value.focus()
-      const newPos = before.length + 1 + shortCode.length + 1
-      promptTextarea.value.selectionStart = newPos
-      promptTextarea.value.selectionEnd = newPos
-    }
-  })
-}
-
-const selectTemplate = (template) => {
-  showTemplateSuggestions.value = false
-  templateSearchTerm.value = ''
-  const hashIndex = prompt.value.lastIndexOf('#')
-  prompt.value = prompt.value.substring(0, hashIndex) + template.content + ' '
-  
-  // 在下一帧聚焦到 textarea 并设置光标位置
-  nextTick(() => {
-    if (promptTextarea.value) {
-      promptTextarea.value.focus()
-      // 设置光标到末尾
-      promptTextarea.value.selectionStart = promptTextarea.value.value.length
-      promptTextarea.value.selectionEnd = promptTextarea.value.value.length
-    }
-  })
-}
-
-const formatPrompt = (text) => {
-  let escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  escaped = escaped.replace(/@图片(\d+)/g, '<span style="color: #00d4ff; font-weight: bold;">@图片$1</span>')
-  escaped = escaped.replace(/@视频(\d+)/g, '<span style="color: #ff4444; font-weight: bold;">@视频$1</span>')
-  escaped = escaped.replace(/@音频(\d+)/g, '<span style="color: #00ff88; font-weight: bold;">@音频$1</span>')
-  escaped = escaped.replace(/@首帧/g, '<span style="color: #00d4ff; font-weight: bold;">@首帧</span>')
-  escaped = escaped.replace(/@尾帧/g, '<span style="color: #ff4444; font-weight: bold;">@尾帧</span>')
-  return escaped
-}
-
-// 构建提示词的映射表
-const buildPromptMapping = () => {
-  const mapping = {}
-  const files = atFilesList.value
-  files.forEach((file, index) => {
-    const shortCode = file.shortCode || (
-      file.fileType === 'video' ? `视频${index + 1}` : 
-      file.fileType === 'audio' ? `音频${index + 1}` : 
-      `图片${index + 1}`
-    )
-    mapping[`@${shortCode}`] = file.url
-  })
-  return mapping
-}
-
-// 将用户输入的提示词替换为实际的 URL
-const replacePromptCodes = (text) => {
-  const mapping = buildPromptMapping()
-  let result = text
-  for (const [code, url] of Object.entries(mapping)) {
-    result = result.replace(new RegExp(code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), url)
-  }
-  return result
-}
-
-const handleModelChange = (e) => {
-  const modelKey = e.target.value
-  selectedModel.value = modelKey
-  const modelConfig = VIDEO_MODELS[modelKey]
-  if (modelConfig) {
-    resolution.value = modelConfig.default_resolution || '720p'
-  }
-}
+const handleModelChange = createModelChangeHandler(selectedModel, resolution, VIDEO_MODELS)
 
 const randomizeSeed = () => {
   seed.value = Math.floor(Math.random() * 2147483647)

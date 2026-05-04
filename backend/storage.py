@@ -6,6 +6,8 @@ import json
 import os
 import requests
 import uuid
+import threading
+import tempfile
 from datetime import datetime
 import logging
 from tos_service import get_tos_service
@@ -13,6 +15,10 @@ from utils.file_naming import format_result_filename, get_result_display_name
 from config import Config
 
 logger = logging.getLogger(__name__)
+
+_history_lock = threading.Lock()
+_chat_lock = threading.Lock()
+_templates_lock = threading.Lock()
 
 STORAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'LocalStorage')
 HISTORY_FILE = os.path.join(STORAGE_DIR, 'history.json')
@@ -42,20 +48,34 @@ def load_history():
         return []
 
 
+def _atomic_write_json(filepath, data):
+    """原子写入 JSON 文件，防止写入中途崩溃导致文件损坏"""
+    dir_name = os.path.dirname(filepath)
+    os.makedirs(dir_name, exist_ok=True)
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp')
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, filepath)
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
+
+
 def save_history(history):
     ensure_storage_dir()
-    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
+    _atomic_write_json(HISTORY_FILE, history)
 
 
 def add_to_history(item):
-    history = load_history()
-    item['id'] = len(history) + 1
-    # 如果没有 created_at 才设置，避免覆盖
-    if 'created_at' not in item:
-        item['created_at'] = datetime.now().isoformat()
-    history.append(item)
-    save_history(history)
+    with _history_lock:
+        history = load_history()
+        item['id'] = len(history) + 1
+        if 'created_at' not in item:
+            item['created_at'] = datetime.now().isoformat()
+        history.append(item)
+        save_history(history)
     return item
 
 
@@ -79,16 +99,16 @@ def load_chat():
 
 def save_chat(chat):
     ensure_storage_dir()
-    with open(CHAT_FILE, 'w', encoding='utf-8') as f:
-        json.dump(chat, f, ensure_ascii=False, indent=2)
+    _atomic_write_json(CHAT_FILE, chat)
 
 
 def add_chat_message(message):
-    chat = load_chat()
-    message['id'] = len(chat) + 1
-    message['created_at'] = datetime.now().isoformat()
-    chat.append(message)
-    save_chat(chat)
+    with _chat_lock:
+        chat = load_chat()
+        message['id'] = len(chat) + 1
+        message['created_at'] = datetime.now().isoformat()
+        chat.append(message)
+        save_chat(chat)
     return message
 
 
@@ -142,49 +162,48 @@ def load_templates():
 def save_templates(templates):
     """保存模版列表"""
     ensure_storage_dir()
-    with open(TEMPLATES_FILE, 'w', encoding='utf-8') as f:
-        json.dump(templates, f, ensure_ascii=False, indent=2)
+    _atomic_write_json(TEMPLATES_FILE, templates)
 
 
 def add_template(template_data):
-    """新增模版"""
-    templates = load_templates()
-    template_id = f"template_{uuid.uuid4().hex[:8]}"
-    new_template = {
-        "id": template_id,
-        "name": template_data.get("name", ""),
-        "content": template_data.get("content", ""),
-        "fullWidth": template_data.get("fullWidth", False),
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat()
-    }
-    templates.append(new_template)
-    save_templates(templates)
+    with _templates_lock:
+        templates = load_templates()
+        template_id = f"template_{uuid.uuid4().hex[:8]}"
+        new_template = {
+            "id": template_id,
+            "name": template_data.get("name", ""),
+            "content": template_data.get("content", ""),
+            "fullWidth": template_data.get("fullWidth", False),
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat()
+        }
+        templates.append(new_template)
+        save_templates(templates)
     return new_template
 
 
 def update_template(template_id, template_data):
-    """更新模版"""
-    templates = load_templates()
-    index = next((i for i, t in enumerate(templates) if t["id"] == template_id), None)
-    if index is not None:
-        templates[index]["name"] = template_data.get("name", templates[index]["name"])
-        templates[index]["content"] = template_data.get("content", templates[index]["content"])
-        templates[index]["fullWidth"] = template_data.get("fullWidth", templates[index]["fullWidth"])
-        templates[index]["updated_at"] = datetime.now().isoformat()
-        save_templates(templates)
-        return templates[index]
+    with _templates_lock:
+        templates = load_templates()
+        index = next((i for i, t in enumerate(templates) if t["id"] == template_id), None)
+        if index is not None:
+            templates[index]["name"] = template_data.get("name", templates[index]["name"])
+            templates[index]["content"] = template_data.get("content", templates[index]["content"])
+            templates[index]["fullWidth"] = template_data.get("fullWidth", templates[index]["fullWidth"])
+            templates[index]["updated_at"] = datetime.now().isoformat()
+            save_templates(templates)
+            return templates[index]
     return None
 
 
 def delete_template(template_id):
-    """删除模版"""
-    templates = load_templates()
-    index = next((i for i, t in enumerate(templates) if t["id"] == template_id), None)
-    if index is not None:
-        deleted = templates.pop(index)
-        save_templates(templates)
-        return deleted
+    with _templates_lock:
+        templates = load_templates()
+        index = next((i for i, t in enumerate(templates) if t["id"] == template_id), None)
+        if index is not None:
+            deleted = templates.pop(index)
+            save_templates(templates)
+            return deleted
     return None
 
 

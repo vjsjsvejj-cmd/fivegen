@@ -7,11 +7,12 @@ from pydantic import BaseModel
 import socketio
 import os
 import uuid
+import asyncio
 import contextlib
 from typing import Optional
 import logging
 from socket_manager import SocketManager
-from config import Config, UPLOAD_DIR
+from config import Config, UPLOAD_DIR, cleanup_temp_uploads
 from tos_service import init_tos_service, get_tos_service
 from inversion_service import InversionService
 from prompt_helper_service import PromptHelperService
@@ -73,17 +74,49 @@ app.mount("/local-media", StaticFiles(directory=local_media_dir), name="local-me
 audios_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "LocalStorage", "media", "audios")
 os.makedirs(audios_dir, exist_ok=True)
 
+def _get_allowed_origins():
+    if "*" in Config.ALLOWED_ORIGINS:
+        return ["*"]
+    origins = list(Config.ALLOWED_ORIGINS)
+    import socket
+    try:
+        local_ips = socket.gethostbyname_ex(socket.gethostname())[2]
+        for ip in local_ips:
+            for port in ["3000", "5173", "5174", "5175"]:
+                origin = f"http://{ip}:{port}"
+                if origin not in origins:
+                    origins.append(origin)
+    except socket.gaierror:
+        pass
+    return origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+def _build_socketio_origins():
+    if "*" in Config.ALLOWED_ORIGINS:
+        return "*"
+    origins = list(Config.ALLOWED_ORIGINS)
+    import socket
+    try:
+        local_ips = socket.gethostbyname_ex(socket.gethostname())[2]
+        for ip in local_ips:
+            for port in ["3000", "5173"]:
+                origin = f"http://{ip}:{port}"
+                if origin not in origins:
+                    origins.append(origin)
+    except socket.gaierror:
+        pass
+    return origins
+
 sio = socketio.AsyncServer(
     async_mode="asgi",
-    cors_allowed_origins="*",
+    cors_allowed_origins=_build_socketio_origins(),
     logger=False,
     engineio_logger=False
 )
@@ -92,6 +125,8 @@ socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 socket_manager = SocketManager(sio)
 socket_manager.register_events()
+
+cleanup_temp_uploads()
 
 # 初始化 TOS 服务
 if Config.is_tos_enabled():
@@ -247,7 +282,7 @@ async def analyze_media(file: UploadFile = File(...), template: Optional[str] = 
         logger.info(f"Analyzing {'video' if is_video else 'image'} file: {file.filename}")
         
         # 调用逆向解析服务
-        result = inversion_service.analyze_media(temp_file_path, is_video=is_video, custom_template=template)
+        result = await asyncio.to_thread(inversion_service.analyze_media, temp_file_path, is_video, template)
         
         return JSONResponse({
             "success": True,
@@ -292,13 +327,13 @@ async def prompt_helper(request: PromptHelperRequest):
         logger.info(f"提示词增强: {request.action_type}")
 
         if request.action_type == "complete":
-            result = PromptHelperService.complete_prompt(request.user_input)
+            result = await asyncio.to_thread(PromptHelperService.complete_prompt, request.user_input)
         elif request.action_type == "replace":
             if not request.selected_text:
                 raise HTTPException(status_code=400, detail="替换操作必须传入选中的文本")
-            result = PromptHelperService.replace_prompt(request.user_input, request.selected_text)
+            result = await asyncio.to_thread(PromptHelperService.replace_prompt, request.user_input, request.selected_text)
         elif request.action_type == "reference":
-            result = PromptHelperService.get_reference_prompt(request.user_input)
+            result = await asyncio.to_thread(PromptHelperService.get_reference_prompt, request.user_input)
         else:
             raise HTTPException(status_code=400, detail="不支持的操作类型")
 
@@ -458,7 +493,7 @@ async def voice_clone_upload_audio(file: UploadFile = File(...)):
 
         logger.info(f"声音克隆-上传参考音频: {original_name} ({len(content)} bytes)")
 
-        result = VoiceCloneService.upload_audio_file(temp_path, original_name)
+        result = await asyncio.to_thread(VoiceCloneService.upload_audio_file, temp_path, original_name)
 
         return JSONResponse({
             "success": True,
@@ -661,7 +696,7 @@ async def digital_human_generate(request: DigitalHumanRequest):
                 video_filename = f"dh_{uuid.uuid4().hex[:8]}.mp4"
                 video_path = os.path.join(video_dir, video_filename)
 
-                download_response = requests.get(video_url, timeout=Config.VIDEO_DOWNLOAD_TIMEOUT)
+                download_response = await asyncio.to_thread(requests.get, video_url, timeout=Config.VIDEO_DOWNLOAD_TIMEOUT)
                 download_response.raise_for_status()
                 with open(video_path, 'wb') as f:
                     f.write(download_response.content)

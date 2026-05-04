@@ -1,5 +1,6 @@
 <script setup>
-import { ref, onMounted, nextTick, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, computed, watch, inject } from 'vue'
+import { API_BASE_URL } from '../utils/config.js'
 
 const props = defineProps({
   modelValue: {
@@ -18,9 +19,8 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const toast = inject('toast', { error: (msg) => console.error(msg) })
 
-// 构建映射 @代码 -> URL
 const buildPromptMapping = () => {
   const mapping = {}
   const files = atFilesList.value
@@ -101,7 +101,7 @@ const getCatName = (cat) => {
 
 const fetchQuickPresets = async () => {
   try {
-    const res = await fetch(API_BASE + '/api/quick-presets')
+    const res = await fetch(API_BASE_URL + '/api/quick-presets')
     const data = await res.json()
     if (data.success) {
       quickPresets.value = data.data
@@ -150,6 +150,8 @@ const currentButtonClass = computed(() => {
 const findAndBindTextarea = () => {
   if (!helperWrapperRef.value) return
 
+  unbindTextarea()
+
   let textarea = null
   let parent = helperWrapperRef.value.parentElement
   let count = 0
@@ -168,6 +170,17 @@ const findAndBindTextarea = () => {
     textarea.addEventListener('input', handleInput)
     textarea.addEventListener('click', updateSelection)
     textarea.addEventListener('select', updateSelection)
+  }
+}
+
+const unbindTextarea = () => {
+  if (activeTextarea) {
+    activeTextarea.removeEventListener('mouseup', updateSelection)
+    activeTextarea.removeEventListener('keyup', updateSelection)
+    activeTextarea.removeEventListener('input', handleInput)
+    activeTextarea.removeEventListener('click', updateSelection)
+    activeTextarea.removeEventListener('select', updateSelection)
+    activeTextarea = null
   }
 }
 
@@ -215,7 +228,7 @@ const handleAutoComplete = async () => {
     // 先替换 @代码为真实 URL
     const userInputWithUrls = replacePromptCodes(props.modelValue)
     
-    const res = await fetch(API_BASE + '/api/prompt-helper', {
+    const res = await fetch(API_BASE_URL + '/api/prompt-helper', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -234,7 +247,7 @@ const handleAutoComplete = async () => {
     }
   } catch (e) {
     console.error('自动补全失败', e)
-    alert('自动补全失败，请重试')
+    toast.error('自动补全失败，请重试')
   } finally {
     isLoading.value = false
   }
@@ -249,7 +262,7 @@ const handleLocalOptimize = async () => {
     const userInputWithUrls = replacePromptCodes(props.modelValue)
     const selectedTextWithUrls = replacePromptCodes(selectedText.value)
     
-    const res = await fetch(API_BASE + '/api/prompt-helper', {
+    const res = await fetch(API_BASE_URL + '/api/prompt-helper', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -268,7 +281,7 @@ const handleLocalOptimize = async () => {
     }
   } catch (e) {
     console.error('局部调优失败', e)
-    alert('局部调优失败，请重试')
+    toast.error('局部调优失败，请重试')
   } finally {
     isLoading.value = false
   }
@@ -282,7 +295,7 @@ const handleMasterpiece = async () => {
     const mapping = buildPromptMapping()
     const userInputWithUrls = replacePromptCodes(props.modelValue)
     
-    const res = await fetch(API_BASE + '/api/prompt-helper', {
+    const res = await fetch(API_BASE_URL + '/api/prompt-helper', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -301,7 +314,7 @@ const handleMasterpiece = async () => {
     }
   } catch (e) {
     console.error('一键封神失败', e)
-    alert('一键封神失败，请重试')
+    toast.error('一键封神失败，请重试')
   } finally {
     isLoading.value = false
   }
@@ -373,6 +386,10 @@ watch(() => props.isEnhanced, (newVal) => {
 
 onMounted(() => {
   fetchQuickPresets()
+})
+
+onUnmounted(() => {
+  unbindTextarea()
 })
 </script>
 

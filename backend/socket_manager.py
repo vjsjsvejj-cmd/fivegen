@@ -8,7 +8,7 @@ import time
 import json
 from typing import Dict, Set, Any
 import logging
-from storage import add_to_history, get_history_by_room, download_and_save_media, add_chat_message, get_chat_by_room, load_templates, add_template, update_template, delete_template
+from storage import add_to_history, get_history_by_room, download_and_save_media, download_media_local_only, add_chat_message, get_chat_by_room, load_templates, add_template, update_template, delete_template
 from image_api_service import ImageAPIService
 
 logger = logging.getLogger(__name__)
@@ -169,7 +169,7 @@ class SocketManager:
         )
         
         # 发送该房间的历史记录给刚加入的用户
-        room_history = get_history_by_room(room_id)
+        room_history = await asyncio.to_thread(get_history_by_room, room_id)
         await self.sio.emit(
             "history_data",
             {"history": room_history},
@@ -236,7 +236,7 @@ class SocketManager:
         if not room_id:
             return
             
-        history = get_history_by_room(room_id)
+        history = await asyncio.to_thread(get_history_by_room, room_id)
         await self.sio.emit("history_data", {"history": history}, room=sid)
 
     async def handle_generate_image(self, sid, data):
@@ -296,7 +296,7 @@ class SocketManager:
             tos_url = remote_image_url
             display_name = None
             try:
-                media_data = download_and_save_media(remote_image_url, 'image')
+                media_data = await asyncio.to_thread(download_and_save_media, remote_image_url, 'image')
                 if media_data:
                     local_path = media_data.get("local_path")
                     tos_url = media_data.get("tos_url", remote_image_url)
@@ -335,7 +335,7 @@ class SocketManager:
                 }
             }
 
-            add_to_history(result)
+            await asyncio.to_thread(add_to_history, result)
 
             logger.info(f"✅ 图片生成成功 - 任务ID: {task_id}, 耗时: {duration}秒")
 
@@ -400,7 +400,7 @@ class SocketManager:
         # 混合方案：同时保存远程URL和下载到本地
         final_url = remote_image_url
         try:
-            local_path = download_and_save_media(remote_image_url, 'image')
+            local_path = await asyncio.to_thread(download_and_save_media, remote_image_url, 'image')
             if local_path:
                 filename = os.path.basename(local_path)
                 final_url = f"/local-media/images/{filename}"
@@ -430,7 +430,7 @@ class SocketManager:
             }
         }
 
-        add_to_history(result)
+        await asyncio.to_thread(add_to_history, result)
 
         logger.info(f"✅ 回退模式图片生成成功 - 任务ID: {task_id}, 耗时: {round(total_time, 2)}秒")
 
@@ -532,7 +532,7 @@ class SocketManager:
             tos_url = remote_video_url
             display_name = None
             try:
-                media_data = download_media_local_only(remote_video_url, 'video')
+                media_data = await asyncio.to_thread(download_media_local_only, remote_video_url, 'video')
                 if media_data:
                     local_path = media_data.get("local_path")
                     display_name = media_data.get("display_name")
@@ -581,7 +581,7 @@ class SocketManager:
                 }
             }
 
-            add_to_history(result)
+            await asyncio.to_thread(add_to_history, result)
 
             logger.info(f"✅ 视频生成成功 - 任务ID: {task_id}, 耗时: {duration_total}秒")
 
@@ -682,7 +682,7 @@ class SocketManager:
             }
         }
 
-        add_to_history(result)
+        await asyncio.to_thread(add_to_history, result)
 
         logger.info(f"✅ 回退模式视频生成成功 - 任务ID: {task_id}")
 
@@ -702,7 +702,7 @@ class SocketManager:
         logger.info(f"🚫 取消任务请求 - 任务ID: {task_id}, 类型: {task_type}, 房间: {room_id}")
 
         if task_type == "video":
-            cancel_result = self.image_service.cancel_video_task(task_id)
+            cancel_result = await self.image_service.cancel_video_task(task_id)
             
             # 发送到房间内的所有用户，让前端都更新进度列表
             target_room = room_id or sid
@@ -738,7 +738,7 @@ class SocketManager:
             "message": message,
             "type": "text"
         }
-        saved_message = add_chat_message(chat_message)
+        saved_message = await asyncio.to_thread(add_chat_message, chat_message)
         
         # 广播给房间内所有用户
         await self.sio.emit(
@@ -753,15 +753,14 @@ class SocketManager:
         if not room_id:
             return
             
-        chat_history = get_chat_by_room(room_id)
+        chat_history = await asyncio.to_thread(get_chat_by_room, room_id)
         await self.sio.emit("chat_history", {"chat": chat_history}, room=sid)
 
     async def handle_get_templates(self, sid, data):
         """获取模版列表"""
         try:
-            templates = load_templates()
+            templates = await asyncio.to_thread(load_templates)
             await self.sio.emit("templates_list", {"templates": templates}, room=sid)
-            # logger.info(f"📋 已发送模版列表 - 数量: {len(templates)}")
         except Exception as e:
             logger.error(f"❌ 获取模版列表失败: {e}")
             await self.sio.emit("templates_list", {"templates": []}, room=sid)
@@ -774,9 +773,9 @@ class SocketManager:
                 await self.sio.emit("template_error", {"error": "模版名称和内容不能为空"}, room=sid)
                 return
                 
-            new_template = add_template(template_data)
+            new_template = await asyncio.to_thread(add_template, template_data)
             logger.info(f"➕ 新增模版成功: {new_template['name']}")
-            templates = load_templates()
+            templates = await asyncio.to_thread(load_templates)
             await self.sio.emit("templates_list", {"templates": templates}, room=sid)
         except Exception as e:
             logger.error(f"❌ 新增模版失败: {e}")
@@ -791,10 +790,10 @@ class SocketManager:
                 await self.sio.emit("template_error", {"error": "模版ID不能为空"}, room=sid)
                 return
                 
-            updated_template = update_template(template_id, template_data)
+            updated_template = await asyncio.to_thread(update_template, template_id, template_data)
             if updated_template:
                 logger.info(f"✏️ 更新模版成功: {updated_template['name']}")
-                templates = load_templates()
+                templates = await asyncio.to_thread(load_templates)
                 await self.sio.emit("templates_list", {"templates": templates}, room=sid)
             else:
                 await self.sio.emit("template_error", {"error": "找不到该模版"}, room=sid)
@@ -810,10 +809,10 @@ class SocketManager:
                 await self.sio.emit("template_error", {"error": "模版ID不能为空"}, room=sid)
                 return
                 
-            deleted = delete_template(template_id)
+            deleted = await asyncio.to_thread(delete_template, template_id)
             if deleted:
                 logger.info(f"🗑️ 删除模版成功: {deleted['name']}")
-                templates = load_templates()
+                templates = await asyncio.to_thread(load_templates)
                 await self.sio.emit("templates_list", {"templates": templates}, room=sid)
             else:
                 await self.sio.emit("template_error", {"error": "找不到该模版"}, room=sid)

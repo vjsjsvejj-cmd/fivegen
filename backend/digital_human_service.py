@@ -21,6 +21,18 @@ class DigitalHumanService:
         return bool(cls.API_KEY and cls.BASE_URL and cls.MODEL)
 
     @classmethod
+    def _post_sync(cls, url, payload, headers):
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        response.raise_for_status()
+        return response.json()
+
+    @classmethod
+    def _get_sync(cls, url, headers):
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        return response.json()
+
+    @classmethod
     async def create_digital_human(cls, image_url: str, audio_url: str,
                                     progress_callback=None, task_id: str = "",
                                     **kwargs) -> dict:
@@ -48,9 +60,8 @@ class DigitalHumanService:
         if progress_callback and task_id:
             await progress_callback(task_id, 10)
 
-        response = requests.post(url, json=payload, headers=headers, timeout=120)
-        response.raise_for_status()
-        result = response.json()
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, cls._post_sync, url, payload, headers)
 
         logger.info(f"数字人生成请求响应: {json.dumps(result, ensure_ascii=False)}")
 
@@ -91,9 +102,8 @@ class DigitalHumanService:
         while attempt < max_attempts:
             attempt += 1
             try:
-                response = requests.get(url, headers=headers, timeout=30)
-                response.raise_for_status()
-                result = response.json()
+                loop = asyncio.get_event_loop()
+                result = await loop.run_in_executor(None, cls._get_sync, url, headers)
 
                 consecutive_errors = 0
 

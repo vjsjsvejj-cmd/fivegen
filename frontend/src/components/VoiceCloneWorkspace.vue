@@ -1,6 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, inject } from 'vue'
 import { API_BASE_URL } from '../utils/config.js'
+
+const toast = inject('toast', { warning: (msg) => console.warn(msg), error: (msg) => console.error(msg) })
 
 const props = defineProps({
   roomId: { type: String, default: '' },
@@ -44,7 +46,7 @@ const handleVoiceCloneAudioUpload = async (event) => {
   if (!file) return
 
   if (file.size > 10 * 1024 * 1024) {
-    alert('音频文件大小不能超过10MB')
+    toast.warning('音频文件大小不能超过10MB')
     return
   }
 
@@ -71,7 +73,7 @@ const handleVoiceCloneAudioUpload = async (event) => {
     }
   } catch (error) {
     console.error('上传参考音频失败:', error)
-    alert('上传参考音频失败: ' + error.message)
+    toast.error('上传参考音频失败: ' + error.message)
     voiceCloneRefAudioName.value = ''
     voiceCloneRefAudio.value = null
   } finally {
@@ -80,6 +82,9 @@ const handleVoiceCloneAudioUpload = async (event) => {
 }
 
 const removeVoiceCloneAudio = () => {
+  if (voiceCloneRefAudio.value && voiceCloneRefAudio.value.startsWith('blob:')) {
+    URL.revokeObjectURL(voiceCloneRefAudio.value)
+  }
   voiceCloneRefAudio.value = null
   voiceCloneRefAudioName.value = ''
   voiceCloneRefFileId.value = ''
@@ -135,7 +140,7 @@ const handleVoiceCloneGenerate = async () => {
     } else if (msg.includes('1305')) {
       msg = '智谱平台服务过载，请稍后再试。'
     }
-    alert('声音克隆失败: ' + msg)
+    toast.error('声音克隆失败: ' + msg)
   } finally {
     voiceCloneLoading.value = false
     voiceCloneProgress.value = 0
@@ -166,7 +171,7 @@ const handleDHImageUpload = async (event) => {
     }
   } catch (error) {
     console.error('上传数字人图片失败:', error)
-    alert('上传图片失败: ' + error.message)
+    toast.error('上传图片失败: ' + error.message)
     dhImageName.value = ''
     dhImageUrl.value = ''
   } finally {
@@ -203,7 +208,7 @@ const handleDHAudioUpload = async (event) => {
     }
   } catch (error) {
     console.error('上传数字人音频失败:', error)
-    alert('上传音频失败: ' + error.message)
+    toast.error('上传音频失败: ' + error.message)
     dhAudioName.value = ''
     dhAudioUrl.value = ''
   } finally {
@@ -254,7 +259,7 @@ const handleDHGenerate = async () => {
     }
   } catch (error) {
     console.error('数字人生成失败:', error)
-    alert('数字人生成失败: ' + error.message)
+    toast.error('数字人生成失败: ' + error.message)
   } finally {
     dhLoading.value = false
     dhProgress.value = 0

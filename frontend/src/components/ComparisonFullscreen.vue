@@ -1,5 +1,8 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, inject } from 'vue'
+import { API_BASE_URL } from '../utils/config.js'
+
+const toast = inject('toast', { info: (msg) => console.log(msg), error: (msg) => console.error(msg) })
 
 const props = defineProps({
   visible: {
@@ -18,9 +21,6 @@ const props = defineProps({
 
 const emit = defineEmits(['close'])
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-// 布局：'vertical' 上下 | 'horizontal' 左右
 const layout = ref('vertical')
 
 // 图片缩放和位移
@@ -144,7 +144,7 @@ const saveScreenshot = async () => {
     
     if (media1 && media2) {
       // 简单的截图实现 - 实际项目中可以用 html2canvas
-      alert('💡 截图功能需要安装 html2canvas 库才能完美实现！\n当前已为你标记截图区域，请使用系统截图工具进行截图。')
+      toast.info('💡 截图功能需要安装 html2canvas 库才能完美实现！\n当前已为你标记截图区域，请使用系统截图工具进行截图。')
       
       // 临时高亮一下
       const items = document.querySelectorAll('.comparison-item')
@@ -157,7 +157,7 @@ const saveScreenshot = async () => {
     }
   } catch (e) {
     console.error('截图失败', e)
-    alert('截图失败，请使用浏览器自带的截图功能')
+    toast.error('截图失败，请使用浏览器自带的截图功能')
   }
 }
 

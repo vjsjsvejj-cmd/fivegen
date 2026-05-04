@@ -126,17 +126,19 @@ onUnmounted(() => {
   <div 
     v-if="visible" 
     class="modal-overlay" 
+    role="dialog"
+    aria-modal="true"
     @click="handleOverlayClick"
   >
     <div class="modal-content">
-      <button class="close-btn" @click="close">×</button>
+      <button class="close-btn" @click="close" aria-label="关闭">×</button>
       
       <!-- 图片控制按钮 -->
       <div v-if="type === 'image'" class="image-controls">
-        <button class="control-btn" @click="zoomOut" title="缩小">−</button>
+        <button class="control-btn" @click="zoomOut" aria-label="缩小">−</button>
         <span class="scale-display">{{ Math.round(scale * 100) }}%</span>
-        <button class="control-btn" @click="zoomIn" title="放大">+</button>
-        <button class="control-btn reset-btn" @click="reset" title="重置">重置</button>
+        <button class="control-btn" @click="zoomIn" aria-label="放大">+</button>
+        <button class="control-btn reset-btn" @click="reset" aria-label="重置缩放">重置</button>
       </div>
       
       <div class="media-wrapper">

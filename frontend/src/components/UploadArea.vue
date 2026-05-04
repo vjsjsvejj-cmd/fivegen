@@ -1,8 +1,10 @@
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, inject } from 'vue'
 import Modal from './Modal.vue'
 import { API_BASE_URL } from '../utils/config.js'
+
+const toast = inject('toast', { error: (msg) => console.error(msg) })
 
 const props = defineProps({
   modelValue: {
@@ -189,7 +191,7 @@ const addFiles = async (newFiles) => {
       }
     } catch (error) {
       console.error('上传失败:', error)
-      alert('文件上传失败: ' + error.message)
+      toast.error('文件上传失败: ' + error.message)
     } finally {
       uploading.value = false
     }
@@ -256,10 +258,14 @@ defineExpose({})
     <div
       class="drop-zone"
       :class="{ dragging: isDragging, uploading: uploading }"
+      role="button"
+      tabindex="0"
+      :aria-label="uploading ? '上传中' : label"
       @drop="handleDrop"
       @dragover="handleDragOver"
       @dragleave="handleDragLeave"
       @click="!uploading && $refs.fileInput.click()"
+      @keydown.enter="!uploading && $refs.fileInput.click()"
     >
       <div class="drop-icon">{{ uploading ? '⏳' : '📁' }}</div>
       <div class="drop-text">{{ uploading ? '上传中...' : label }}</div>

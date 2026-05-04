@@ -69,10 +69,6 @@ const getAnimationClass = (item) => {
   if (!isNewResult(item) || ANIMATION_MODE === 'none') {
     return '';
   }
-  // 调试信息
-  if (isNewResult(item)) {
-    console.log('🎨 动画应用于:', item.task_id, '动画模式:', ANIMATION_MODE);
-  }
   return ANIMATION_MODE;
 }
 
@@ -334,8 +330,8 @@ onUnmounted(() => {
   <div class="result-grid">
     <!-- 显示进度项和结果项，进度项最新的在最上面 -->
     <div 
-      v-for="item in displayList" 
-      :key="item?.task_id || Math.random()" 
+      v-for="(item, index) in displayList" 
+      :key="item?.task_id || `progress-${item.type}-${index}`" 
       :class="['grid-card', { 
         'progress-card': item.progress !== undefined, 
         'result-card': item.progress === undefined 

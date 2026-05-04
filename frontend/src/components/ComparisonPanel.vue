@@ -1,11 +1,9 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { getDisplayUrl, handleImageError } from '../utils/media.js'
 
 const emit = defineEmits(['close', 'startComparison'])
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-// 两个拖拽区域的数据
 const item1 = ref(null)
 const item2 = ref(null)
 
@@ -84,17 +82,6 @@ const startComparison = () => {
     })
     emit('close')
   }
-}
-
-// 获取显示URL
-const getDisplayUrl = (item) => {
-  if (!item) return ''
-  if (item.type === 'video') {
-    const thumbnailUrl = item.thumbnail || item.url
-    return thumbnailUrl.startsWith('/') ? `${API_BASE_URL}${thumbnailUrl}` : thumbnailUrl
-  }
-  const displayUrl = item.url || item.remote_url
-  return displayUrl.startsWith('/') ? `${API_BASE_URL}${displayUrl}` : displayUrl
 }
 </script>
 

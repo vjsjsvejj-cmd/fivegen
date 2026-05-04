@@ -190,7 +190,7 @@ class ImageAPIService:
                                task_id: Optional[str] = None,
                                progress_callback: Optional[Callable[[str, int], Any]] = None) -> Dict[str, Any]:
         """轮询 GRSAI 任务状态"""
-        response = requests.post(url, json=payload, headers=headers)
+        response = await asyncio.to_thread(requests.post, url, json=payload, headers=headers)
         response.raise_for_status()
         result = response.json()
 
@@ -221,7 +221,7 @@ class ImageAPIService:
                 logger.debug(f"📍 轮询地址: {query_url}")
                 logger.debug(f"📦 轮询参数: {json.dumps(query_payload, ensure_ascii=False)}")
                 
-                query_response = requests.post(query_url, json=query_payload, headers=headers)
+                query_response = await asyncio.to_thread(requests.post, query_url, json=query_payload, headers=headers)
                 query_response.raise_for_status()
                 query_result = query_response.json()
                 
@@ -340,7 +340,7 @@ class ImageAPIService:
                 if progress_callback and task_id:
                     await progress_callback(task_id, progress)
             
-            response = requests.post(url, json=payload, headers=headers)
+            response = await asyncio.to_thread(requests.post, url, json=payload, headers=headers)
             response.raise_for_status()
             result = response.json()
             
@@ -478,7 +478,7 @@ class ImageAPIService:
         logger.info("=" * 80)
         
         try:
-            response = requests.post(url, json=payload, headers=headers)
+            response = await asyncio.to_thread(requests.post, url, json=payload, headers=headers)
             response.raise_for_status()
             result = response.json()
             
@@ -535,7 +535,7 @@ class ImageAPIService:
                 logger.debug(f"🔄 轮询第 {attempt}/{max_attempts} 次")
                 logger.debug(f"📍 轮询地址: {url}")
                 
-                query_response = requests.get(url, headers=headers)
+                query_response = await asyncio.to_thread(requests.get, url, headers=headers)
                 query_response.raise_for_status()
                 query_result = query_response.json()
                 
@@ -612,21 +612,18 @@ class ImageAPIService:
         raise Exception("Video task timeout")
     
     @classmethod
-    def cancel_video_task(cls, task_id: str):
+    async def cancel_video_task(cls, task_id: str):
         """取消视频任务"""
         logger.info(f"🚫 请求取消视频任务: {task_id}")
         
-        # 标记任务为已取消
         cls.cancelled_tasks.add(task_id)
         logger.info(f"🔖 标记任务为已取消: {task_id}")
         
-        # 查找对应的火山引擎任务 ID
         task_id_from_api = cls.task_id_map.get(task_id)
         
         if task_id_from_api:
             logger.info(f"🔗 找到对应的API任务: {task_id_from_api}")
             
-            # 尝试调用火山引擎的取消 API
             try:
                 url = f"{cls.VOLCENGINE_BASE_URL}/contents/generations/tasks/{task_id_from_api}"
                 headers = {
@@ -635,7 +632,7 @@ class ImageAPIService:
                 }
                 
                 logger.info(f"📤 调用火山引擎取消任务 API: {url}")
-                response = requests.delete(url, headers=headers)
+                response = await asyncio.to_thread(requests.delete, url, headers=headers)
                 
                 if response.status_code == 200:
                     logger.info(f"✅ 火山引擎取消任务 API 调用成功")

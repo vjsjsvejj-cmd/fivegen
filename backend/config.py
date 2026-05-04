@@ -15,7 +15,9 @@ class Config:
     PORT = int(os.getenv("PORT", "8000"))
 
     # CORS 配置
-    ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+    # 生产环境应明确指定允许的域名，如: http://localhost:3000,http://192.168.1.100:3000
+    # 开发环境可使用 * 允许所有来源，但切勿在生产环境使用
+    ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 
     # TOS 配置
     TOS_ACCESS_KEY = os.getenv("TOS_ACCESS_KEY", "")
@@ -45,12 +47,11 @@ class Config:
     VOLCENGINE_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
     
     # 🟡 新增：逆向解析配置
-    INVERSION_API_KEY = os.getenv("INVERSION_API_KEY", "ark-bbf4478d-2133-4a2b-9ca3-0a36f59fb590-19753")
+    INVERSION_API_KEY = os.getenv("INVERSION_API_KEY", "")
     INVERSION_MODEL = os.getenv("INVERSION_MODEL", "doubao-seed-2-0-lite-260215")
     INVERSION_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 
-    # 智谱AI 声音克隆配置
-    GLM_API_KEY = os.getenv("GLM_API_KEY", "00ea5384526546b28f86b88db98ab35e.mPVV4dpYNMUqnxBB")
+    GLM_API_KEY = os.getenv("GLM_API_KEY", "")
     GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
     GLM_TTS_MODEL = "glm-tts-clone"
 
@@ -61,17 +62,50 @@ class Config:
 
     @classmethod
     def validate(cls):
-        """验证配置验证"""
+        warnings = []
         if not cls.TOS_ACCESS_KEY or not cls.TOS_SECRET_KEY:
-            logger.warning("TOS credentials not configured - TOS upload will be disabled")
-            return False
-        return True
+            warnings.append("TOS credentials not configured - TOS upload will be disabled")
+        if not cls.INVERSION_API_KEY:
+            warnings.append("INVERSION_API_KEY not configured - inversion feature will be disabled")
+        if not cls.GLM_API_KEY:
+            warnings.append("GLM_API_KEY not configured - voice clone feature will be disabled")
+        for w in warnings:
+            logger.warning(w)
+        return len(warnings) == 0
 
     @classmethod
     def is_tos_enabled(cls) -> bool:
         return bool(cls.TOS_ACCESS_KEY and cls.TOS_SECRET_KEY)
 
+    @classmethod
+    def is_inversion_enabled(cls) -> bool:
+        return bool(cls.INVERSION_API_KEY)
+
+    @classmethod
+    def is_voice_clone_enabled(cls) -> bool:
+        return bool(cls.GLM_API_KEY)
+
 
 # 创建临时上传目录
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "temp_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+def cleanup_temp_uploads():
+    """清理临时上传目录中的残留文件"""
+    import glob
+    import time
+    if not os.path.exists(UPLOAD_DIR):
+        return
+    now = time.time()
+    max_age = 3600
+    cleaned = 0
+    for filepath in glob.glob(os.path.join(UPLOAD_DIR, "*")):
+        try:
+            if os.path.isfile(filepath) and (now - os.path.getmtime(filepath)) > max_age:
+                os.remove(filepath)
+                cleaned += 1
+        except Exception:
+            pass
+    if cleaned > 0:
+        logger.info(f"Cleaned up {cleaned} expired temp upload files")

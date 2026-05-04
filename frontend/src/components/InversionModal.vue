@@ -1,5 +1,8 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, inject } from 'vue'
+import { API_BASE_URL } from '../utils/config.js'
+
+const confirmDialog = inject('confirm', async (msg) => window.confirm(msg))
 
 const props = defineProps({
   visible: {
@@ -9,8 +12,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'apply'])
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const uploadedFile = ref(null)
 const filePreviewUrl = ref(null)
@@ -71,8 +72,9 @@ const saveTemplate = () => {
 };
 
 // 重置模板
-const resetTemplate = () => {
-  if (confirm('确定要重置为默认模板吗？')) {
+const resetTemplate = async () => {
+  const confirmed = await confirmDialog('确定要重置为默认模板吗？')
+  if (confirmed) {
     promptTemplate.value = defaultPromptTemplate;
     savedTemplate.value = 'reset';
     setTimeout(() => {
@@ -184,7 +186,14 @@ const handleApply = () => {
 }
 
 // 关闭弹窗
+const revokePreviewUrl = () => {
+  if (filePreviewUrl.value && filePreviewUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(filePreviewUrl.value)
+  }
+}
+
 const closeModal = () => {
+  revokePreviewUrl()
   uploadedFile.value = null
   filePreviewUrl.value = null
   analysisResult.value = null
@@ -195,6 +204,7 @@ const closeModal = () => {
 
 // 清空文件
 const clearFile = () => {
+  revokePreviewUrl()
   uploadedFile.value = null
   filePreviewUrl.value = null
   analysisResult.value = null
@@ -204,7 +214,7 @@ const clearFile = () => {
 
 <template>
   <div v-if="visible" class="inversion-modal-overlay" @click.self="closeModal">
-    <div class="inversion-modal">
+    <div class="inversion-modal" role="dialog" aria-modal="true" aria-label="逆向解析">
       <div class="modal-header">
         <h2 @click="handleTitleClick" class="modal-title">
           🔍 逆向解析
