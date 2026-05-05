@@ -9,6 +9,8 @@ import os
 import uuid
 import asyncio
 import contextlib
+import shutil
+import requests
 from typing import Optional
 import logging
 from socket_manager import SocketManager
@@ -58,6 +60,16 @@ def temporary_file(file_path):
             logger.warning(f"清理临时文件失败: {e}")
 
 app = FastAPI(title="Five Gen 2.4.5", version="2.4.5")
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"Unhandled exception: {exc}", exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"}
+    )
+
 
 # 创建静态文件目录
 static_dir = os.path.join(os.path.dirname(__file__), "static")
@@ -222,7 +234,6 @@ async def upload_file(
 
         # 如果 TOS 上传失败或不可用，使用本地存储
         if not public_url:
-            import shutil
             local_path = os.path.join(static_dir, new_filename)
             shutil.copy2(temp_path, local_path)
             public_url = f"/static/{new_filename}"
@@ -615,7 +626,6 @@ async def digital_human_upload_image(file: UploadFile = File(...)):
                     logger.warning(f"TOS上传失败: {e}")
 
         if not public_url:
-            import shutil
             static_dir = os.path.join(os.path.dirname(__file__), "static")
             new_filename = format_upload_filename(original_name, 1)
             local_path = os.path.join(static_dir, new_filename)
@@ -676,7 +686,6 @@ async def digital_human_upload_audio(file: UploadFile = File(...)):
                     logger.warning(f"TOS上传失败: {e}")
 
         if not public_url:
-            import shutil
             static_dir = os.path.join(os.path.dirname(__file__), "static")
             new_filename = format_upload_filename(original_name, 1)
             local_path = os.path.join(static_dir, new_filename)

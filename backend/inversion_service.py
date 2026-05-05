@@ -89,13 +89,11 @@ class InversionService:
             logger.info("Calling Ark API for inversion...")
             response = requests.post(url, headers=headers, json=payload, timeout=120)
             logger.info(f"API response status: {response.status_code}")
-            
+
+            response.raise_for_status()
+
             result = response.json()
             logger.info("Received API response")
-            
-            response.raise_for_status()
-            
-            result = response.json()
             extracted_text = extract_text_from_ark_response(result)
             return extracted_text
                 

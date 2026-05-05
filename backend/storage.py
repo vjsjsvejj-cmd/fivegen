@@ -127,7 +127,11 @@ def get_chat_by_room(room_id):
 
 
 def get_default_templates():
-    """获取默认模版列表"""
+    """获取默认模版列表
+    
+    ⚠️ 同步说明：此列表需与前端 useTemplates.js 中的 defaultTemplates 保持一致。
+    修改此处时，务必同步修改前端 src/composables/useTemplates.js 中的对应定义。
+    """
     return [
         {"id": "template_1", "name": "Slogan", "content": "「文字内容」+「出现时机」+「出现位置」+「出现方式」，「文字特征（颜色、风格）」", "fullWidth": False, "created_at": datetime.now().isoformat(), "updated_at": datetime.now().isoformat()},
         {"id": "template_2", "name": "字幕", "content": "画面底部出现字幕，字幕内容为\"……\"，字幕需与音频节奏完全同步。", "fullWidth": False, "created_at": datetime.now().isoformat(), "updated_at": datetime.now().isoformat()},

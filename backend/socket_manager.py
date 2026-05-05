@@ -364,61 +364,27 @@ class SocketManager:
             await self._fallback_generate_image(sid, data, task_id, user_id, room_id)
 
     async def _fallback_generate_image(self, sid, data, task_id, user_id, room_id):
-        """回退到模拟生成（在真实API失败时使用）"""
-        logger.info(f"🔄 回退模式启动 - 任务ID: {task_id}")
+        """API 失败时通知前端生成失败"""
+        logger.warning(f"⚠️ 图片生成失败（API不可用）- 任务ID: {task_id}")
 
-        # 获取模型配置和默认清晰度
         model = data.get("model")
         model_config = IMAGE_MODELS.get(model, {})
         default_resolution = model_config.get("default_resolution", "")
-        
-        # 使用用户指定的清晰度，如果没有则使用默认值
         resolution = data.get("resolution") or default_resolution
-
-        total_time = random.uniform(30, 60)  # 模拟30-60秒的真实生成时间
-        steps = int(total_time / 2)  # 每2秒更新一次进度
-
-        for i in range(steps + 1):
-            progress = int((i / steps) * 100)
-            await self.sio.emit(
-                "generation_progress",
-                {
-                    "task_id": task_id,
-                    "progress": progress,
-                    "type": "image",
-                    "user_id": user_id,
-                    "is_fallback": True  # 🟡 新增：标识这是回退模式
-                },
-                room=room_id
-            )
-            if i < steps:
-                await asyncio.sleep(2)
-
-        seed = random.randint(1000, 9999)
-        remote_image_url = random.choice(PLACEHOLDER_IMAGES).format(seed=seed)
-        
-        # 混合方案：同时保存远程URL和下载到本地
-        final_url = remote_image_url
-        try:
-            local_path = await asyncio.to_thread(download_and_save_media, remote_image_url, 'image')
-            if local_path:
-                filename = os.path.basename(local_path)
-                final_url = f"/local-media/images/{filename}"
-                logger.info(f"图片已备份到本地: {final_url}")
-        except Exception as e:
-            logger.warning(f"下载本地备份失败，将使用远程URL: {e}")
 
         result = {
             "task_id": task_id,
             "type": "image",
             "user_id": user_id,
             "room_id": room_id,
-            "url": final_url,
-            "remote_url": remote_image_url,
-            "duration": round(total_time, 2),
-            "cost": round(random.uniform(1, 5), 2),
+            "url": None,
+            "remote_url": None,
+            "duration": 0,
+            "cost": 0,
             "created_at": int(time.time()),
-            "is_fallback": True,  # 🟡 新增：标识这是回退模式生成的结果
+            "is_fallback": True,
+            "failed": True,
+            "error": "图片生成失败：API服务不可用",
             "params": {
                 "model": model,
                 "aspect_ratio": data.get("aspect_ratio"),
@@ -430,9 +396,7 @@ class SocketManager:
             }
         }
 
-        await asyncio.to_thread(add_to_history, result)
-
-        logger.info(f"✅ 回退模式图片生成成功 - 任务ID: {task_id}, 耗时: {round(total_time, 2)}秒")
+        logger.info(f"❌ 图片生成失败通知已发送 - 任务ID: {task_id}")
 
         await self.sio.emit(
             "image_completed",
@@ -610,64 +574,24 @@ class SocketManager:
             await self._fallback_generate_video(sid, data, task_id, user_id, room_id)
 
     async def _fallback_generate_video(self, sid, data, task_id, user_id, room_id):
-        """回退到模拟视频生成（在真实API失败时使用）"""
-        logger.info(f"🔄 视频回退模式启动 - 任务ID: {task_id}")
-
-        total_time = random.uniform(60, 120)
-        steps = int(total_time / 2)
-
-        for i in range(steps + 1):
-            progress = int((i / steps) * 100)
-            await self.sio.emit(
-                "generation_progress",
-                {
-                    "task_id": task_id,
-                    "progress": progress,
-                    "type": "video",
-                    "user_id": user_id,
-                    "is_fallback": True  # 🟡 新增：标识这是回退模式
-                },
-                room=room_id
-            )
-            if i < steps:
-                await asyncio.sleep(2)
-
-        seed = random.randint(1000, 9999)
-        video_url = "/static/sample.mp4"
-        thumbnail_url = random.choice(PLACEHOLDER_IMAGES).format(seed=seed)
-        
-        try:
-            import shutil
-            static_dir = os.path.join(os.path.dirname(__file__), "static")
-            sample_video = os.path.join(static_dir, "sample.mp4")
-            if os.path.exists(sample_video):
-                local_videos_dir = os.path.join(
-                    os.path.dirname(os.path.dirname(__file__)), 
-                    "LocalStorage", "media", "videos"
-                )
-                os.makedirs(local_videos_dir, exist_ok=True)
-                local_filename = f"{uuid.uuid4()}.mp4"
-                local_video_path = os.path.join(local_videos_dir, local_filename)
-                shutil.copy2(sample_video, local_video_path)
-                video_url = f"/local-media/videos/{local_filename}"
-                logger.info(f"回退视频已保存到本地: {video_url}")
-        except Exception as e:
-            logger.warning(f"复制视频文件失败: {e}")
+        """API 失败时通知前端生成失败"""
+        logger.warning(f"⚠️ 视频生成失败（API不可用）- 任务ID: {task_id}")
 
         result = {
             "task_id": task_id,
             "type": "video",
             "user_id": user_id,
             "room_id": room_id,
-            "url": video_url,
-            "remote_url": video_url,
-            "thumbnail": thumbnail_url,
-            "duration": round(total_time, 2),
-            "cost": round(random.uniform(5, 15), 2),
-            "total_tokens": random.randint(100, 500),
-            "seed": seed,
+            "url": None,
+            "remote_url": None,
+            "thumbnail": None,
+            "duration": 0,
+            "cost": 0,
+            "total_tokens": 0,
             "created_at": int(time.time()),
-            "is_fallback": True,  # 🟡 新增：标识这是回退模式生成的结果
+            "is_fallback": True,
+            "failed": True,
+            "error": "视频生成失败：API服务不可用",
             "params": {
                 "model": data.get("model"),
                 "aspect_ratio": data.get("aspect_ratio"),
@@ -682,9 +606,7 @@ class SocketManager:
             }
         }
 
-        await asyncio.to_thread(add_to_history, result)
-
-        logger.info(f"✅ 回退模式视频生成成功 - 任务ID: {task_id}")
+        logger.info(f"❌ 视频生成失败通知已发送 - 任务ID: {task_id}")
 
         await self.sio.emit(
             "video_completed",

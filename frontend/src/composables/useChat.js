@@ -1,10 +1,10 @@
 import { ref, nextTick } from 'vue'
 import socketManager from '../utils/socket'
 
-export function useChat({ userId, showSidePanel, activeSidePanel }) {
+export function useChat({ userId, showSidePanel, activeSidePanel, unreadMessages: externalUnreadMessages }) {
   const chatMessages = ref([])
   const chatInput = ref('')
-  const unreadMessages = ref(0)
+  const unreadMessages = externalUnreadMessages || ref(0)
   const chatMessagesRef = ref(null)
 
   const handleSendChatMessage = () => {

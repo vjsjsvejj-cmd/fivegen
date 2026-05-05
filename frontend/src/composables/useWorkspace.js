@@ -65,14 +65,18 @@ export function useWorkspace({ toast }) {
 
   const handleImageCompleted = (data) => {
     results.value.unshift(data)
+    if (results.value.length > 200) {
+      results.value = results.value.slice(0, 200)
+    }
     progressList.value = progressList.value.filter(p => p.task_id !== data.task_id)
-    socketManager.getHistory()
   }
 
   const handleVideoCompleted = (data) => {
     results.value.unshift(data)
+    if (results.value.length > 200) {
+      results.value = results.value.slice(0, 200)
+    }
     progressList.value = progressList.value.filter(p => p.task_id !== data.task_id)
-    socketManager.getHistory()
   }
 
   const handleHistoryData = (data) => {

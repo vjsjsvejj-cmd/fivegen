@@ -93,12 +93,10 @@ class SocketManager {
     })
 
     this.socket.on('image_completed', (data) => {
-      console.log('📡 socket.js 收到 image_completed:', data.task_id)
       this.emit('image_completed', data)
     })
 
     this.socket.on('video_completed', (data) => {
-      console.log('📡 socket.js 收到 video_completed:', data.task_id)
       this.emit('video_completed', data)
     })
     

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Five Gen 2.4.5</title>
+  <title>Five Gen 2.5</title>
   <style>
     * {
       margin: 0;
@@ -18,6 +18,16 @@
 </head>
 <body>
   <div id="app"></div>
+  <script>
+    ;(function() {
+      var origLog = console.log
+      console.log = function() {
+        var msg = Array.prototype.join.call(arguments, ' ')
+        if (msg.indexOf('[vite]') === 0) return
+        origLog.apply(console, arguments)
+      }
+    })()
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

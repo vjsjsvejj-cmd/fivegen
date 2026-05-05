@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed, nextTick, provide } from 'vue'
+import { ref, onMounted, onUnmounted, provide } from 'vue'
 import socketManager from './utils/socket'
 import ImageWorkspace from './components/ImageWorkspace.vue'
 import VideoWorkspace from './components/VideoWorkspace.vue'
@@ -10,26 +10,122 @@ import ComparisonFullscreen from './components/ComparisonFullscreen.vue'
 import InversionModal from './components/InversionModal.vue'
 import FiveTV from './components/FiveTV/FiveTV.vue'
 import VoiceCloneWorkspace from './components/VoiceCloneWorkspace.vue'
+import { useRoom } from './composables/useRoom'
+import { useChat } from './composables/useChat'
+import { useFavorites } from './composables/useFavorites'
+import { useTemplates } from './composables/useTemplates'
+import { useWorkspace } from './composables/useWorkspace'
+import { useSidePanel } from './composables/useSidePanel'
+import { useResize } from './composables/useResize'
+import { useSocketEvents } from './composables/useSocketEvents'
+import { useToast } from './composables/useToast'
 
-const activeTab = ref('image')
-const showFiveTV = ref(false)
-let fiveTVClickCount = 0
-let fiveTVClickTimer = null
-const isConnected = ref(false)
-const roomId = ref(socketManager.roomId)
+const toast = useToast()
+const confirmDialog = ref(null)
 const userId = ref('')
-const roomMembers = ref([])
-const copySuccess = ref(false)
-const joinRoomInput = ref('')
-const showSidePanel = ref(false)
-const activeSidePanel = ref('favorites')  // 'favorites' | 'templates' | 'chat' | 'comparison'
+const unreadMessages = ref(0)
 
-// 对比功能
+const {
+  isConnected,
+  roomId,
+  roomMembers,
+  copySuccess,
+  joinRoomInput,
+  copyRoomId,
+  copyShareLink,
+  joinNewRoom,
+  handleUserJoined,
+  handleUserLeft,
+  handleRoomMembers,
+  handleConnect,
+  handleDisconnect,
+} = useRoom({ toast })
+
+const {
+  activeTab,
+  results,
+  historyItems,
+  progressList,
+  currentTaskId,
+  imageWorkspaceRef,
+  videoWorkspaceRef,
+  currentWorkspaceRef,
+  switchTab,
+  handleGenerate,
+  handleCancel,
+  handleCancelTask,
+  handleReEdit,
+  handleProgress,
+  handleImageCompleted,
+  handleVideoCompleted,
+  handleHistoryData,
+  handleTaskCancelled,
+} = useWorkspace({ toast })
+
+const {
+  templates,
+  showTemplateEditor,
+  isAddingTemplate,
+  editingTemplate,
+  newTemplate,
+  templatePanelSearch,
+  filteredTemplatesForPanel,
+  currentEditingTemplate,
+  getTemplates,
+  openAddTemplate,
+  addTemplate,
+  editTemplate,
+  saveTemplateEdit,
+  deleteTemplate,
+  cancelTemplateEdit,
+  registerSocketEvents: registerTemplateSocketEvents,
+  unregisterSocketEvents: unregisterTemplateSocketEvents,
+} = useTemplates({ toast, confirmDialog })
+
+provide('templates', templates)
+
+const {
+  showSidePanel,
+  activeSidePanel,
+  toggleSidePanel,
+} = useSidePanel({ templatePanelSearch, unreadMessages })
+
+const {
+  chatMessages,
+  chatInput,
+  chatMessagesRef,
+  handleSendChatMessage,
+  handleChatMessage,
+  handleChatHistory,
+  formatTime,
+  registerSocketEvents: registerChatSocketEvents,
+  unregisterSocketEvents: unregisterChatSocketEvents,
+} = useChat({ userId, showSidePanel, activeSidePanel, unreadMessages })
+
+const {
+  favorites,
+  favoriteModalVisible,
+  favoriteModalType,
+  favoriteModalUrl,
+  toggleFavorite,
+  isFavorite,
+  getFavoriteDisplayUrl,
+  handleFavoriteImageError,
+  openFavoritePreview,
+  closeFavoriteModal,
+} = useFavorites()
+
+const {
+  leftPanelWidth,
+  isResizing,
+  handleMouseDown,
+  cleanup: cleanupResize,
+} = useResize()
+
+const showFiveTV = ref(false)
 const comparisonFullscreenVisible = ref(false)
 const comparisonItem1 = ref(null)
 const comparisonItem2 = ref(null)
-
-// 逆向解析弹窗
 const showInversionModal = ref(false)
 
 const startComparison = (data) => {
@@ -42,481 +138,14 @@ const closeComparisonFullscreen = () => {
   comparisonFullscreenVisible.value = false
 }
 
-// 处理逆向解析结果应用
 const handleInversionApply = (result) => {
-  // 应用到当前激活的工作区
   const currentWorkspace = activeTab.value === 'image' ? imageWorkspaceRef : videoWorkspaceRef
   if (currentWorkspace && currentWorkspace.value && currentWorkspace.value.setPrompt) {
     currentWorkspace.value.setPrompt(result.positive)
   }
 }
 
-const MAX_RESULTS = 200
-
-const results = ref([])
-const historyItems = ref([])
-const progressList = ref([])
-const chatMessages = ref([])
-const chatInput = ref('')
-const unreadMessages = ref(0)
-
-// 收藏状态
-const favorites = ref([])
-
-// 切换收藏
-const toggleFavorite = (item) => {
-  const index = favorites.value.findIndex(f => f.task_id === item.task_id)
-  if (index === -1) {
-    favorites.value.push({
-      ...item,
-      favoriteTime: Date.now()
-    })
-  } else {
-    favorites.value.splice(index, 1)
-  }
-}
-
-// 检查是否已收藏
-const isFavorite = (item) => {
-  return favorites.value.some(f => f.task_id === item.task_id)
-}
-
-// 模版数据 - 默认模版列表
-const defaultTemplates = [
-  { id: 'template_1', name: 'Slogan', content: '「文字内容」+「出现时机」+「出现位置」+「出现方式」，「文字特征（颜色、风格）」', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_2', name: '字幕', content: '画面底部出现字幕，字幕内容为"……"，字幕需与音频节奏完全同步。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_3', name: '气泡台词', content: '「角色」说："……"，角色话说时周围出现气泡，气泡里写着台词。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_4', name: '主体多视角图参考', content: '参考/提取/结合+「图片 n」中的「主体」，生成「画面描述」，保持「主体」特征一致。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_5', name: '多图参考', content: '参考/提取/结合/按照/生成+「图片n」中的「被参考元素描述」，生成「画面描述」，保持「被参考元素」特征一致。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_6', name: '视频参考', content: '参考「视频n」的「动作描述」，生成「画面描述」，保持动作细节一致。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_7', name: '运镜参考', content: '参考「视频n」的「运镜描述」，生成「画面描述」，保持运镜一致。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_8', name: '特效参考', content: '参考「视频n」的「特效描述」，生成「画面描述」，保持特效一致。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_9', name: '增加元素', content: '在「视频n」的「时间位置」+「空间位置」，增加「理想元素描述」。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_10', name: '删除元素', content: '删除「视频n」中的「被删除元素」，视频其他内容保持不变。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_11', name: '修改元素', content: '将「视频n」中的「被更换元素描述」，替换为「理想元素描述」。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_12', name: '视频延长', content: '向前/向后延长「视频n」+「需延长的视频描述」\n生成「视频n」之前/之后的内容+「需延长的视频描述」', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-  { id: 'template_13', name: '轨道补齐', content: '「视频1」+「过渡画面描述」+接「视频2」+「过渡画面描述」+接「视频3」', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
-]
-
-const templates = ref([...defaultTemplates])
-
-// 提供模板数据给子组件
-provide('templates', templates)
-
-// 模版编辑相关
-const showTemplateEditor = ref(false)
-const isAddingTemplate = ref(false)
-const editingTemplate = ref(null)
-const newTemplate = ref({
-  name: '',
-  content: '',
-  fullWidth: false
-})
-
-// 模板面板搜索
-const templatePanelSearch = ref('')
-
-// 过滤后的模板列表
-const filteredTemplatesForPanel = computed(() => {
-  if (!templatePanelSearch.value) {
-    return templates.value
-  }
-  const searchTerm = templatePanelSearch.value.toLowerCase()
-  return templates.value.filter(template => 
-    template.name.toLowerCase().includes(searchTerm) || 
-    template.content.toLowerCase().includes(searchTerm)
-  )
-})
-
-// 当前编辑的模版（计算属性，用于v-model）
-const currentEditingTemplate = computed({
-  get: () => isAddingTemplate.value ? newTemplate.value : (editingTemplate.value || newTemplate.value),
-  set: (val) => {
-    if (isAddingTemplate.value) {
-      newTemplate.value = val
-    } else if (editingTemplate.value) {
-      editingTemplate.value = val
-    }
-  }
-})
-
-// 获取模版列表
-const getTemplates = () => {
-  socketManager.getTemplates()
-}
-
-// 打开新增模版弹窗
-const openAddTemplate = () => {
-  isAddingTemplate.value = true
-  newTemplate.value = { name: '', content: '', fullWidth: false }
-  showTemplateEditor.value = true
-}
-
-// 添加模版
-const addTemplate = () => {
-  if (!newTemplate.value.name.trim() || !newTemplate.value.content.trim()) {
-    alert('模版名称和内容不能为空！')
-    return
-  }
-  socketManager.addTemplate(newTemplate.value)
-  showTemplateEditor.value = false
-  isAddingTemplate.value = false
-  newTemplate.value = { name: '', content: '', fullWidth: false }
-}
-
-// 编辑模版
-const editTemplate = (template) => {
-  isAddingTemplate.value = false
-  editingTemplate.value = { ...template }
-  showTemplateEditor.value = true
-}
-
-// 保存编辑
-const saveTemplateEdit = () => {
-  if (isAddingTemplate.value) {
-    // 保存新增
-    addTemplate()
-  } else {
-    // 保存编辑
-    if (!editingTemplate.value.name.trim() || !editingTemplate.value.content.trim()) {
-      alert('模版名称和内容不能为空！')
-      return
-    }
-    socketManager.updateTemplate(editingTemplate.value.id, editingTemplate.value)
-    showTemplateEditor.value = false
-    editingTemplate.value = null
-  }
-}
-
-// 删除模版
-const deleteTemplate = (templateId) => {
-  if (confirm('确定要删除这个模版吗？')) {
-    socketManager.deleteTemplate(templateId)
-  }
-}
-
-// 取消编辑
-const cancelTemplateEdit = () => {
-  showTemplateEditor.value = false
-  editingTemplate.value = null
-}
-
-const leftPanelWidth = ref(720)
-const minLeftWidth = 400
-const maxLeftWidth = 900
-const isResizing = ref(false)
-
-const imageWorkspaceRef = ref(null)
-const videoWorkspaceRef = ref(null)
-const chatMessagesRef = ref(null)
-
-// 收藏预览相关
-const favoriteModalVisible = ref(false)
-const favoriteModalType = ref('image')
-const favoriteModalUrl = ref('')
-
-// 导入 API_BASE_URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-const getFavoriteDisplayUrl = (item) => {
-  if (item.type === 'video') {
-    const thumbnailUrl = item.thumbnail || item.url
-    return thumbnailUrl.startsWith('/') ? `${API_BASE_URL}${thumbnailUrl}` : thumbnailUrl
-  }
-  const displayUrl = item.url || item.remote_url
-  return displayUrl.startsWith('/') ? `${API_BASE_URL}${displayUrl}` : displayUrl
-}
-
-const handleFavoriteImageError = (event, item) => {
-  if (item.remote_url && event.target.src !== item.remote_url) {
-    event.target.src = item.remote_url
-  }
-}
-
-const openFavoritePreview = (item) => {
-  favoriteModalType.value = item.type === 'video' ? 'video' : 'image'
-  const previewUrl = item.remote_url || item.url
-  favoriteModalUrl.value = previewUrl.startsWith('/') ? `${API_BASE_URL}${previewUrl}` : previewUrl
-  favoriteModalVisible.value = true
-}
-
-const closeFavoriteModal = () => {
-  favoriteModalVisible.value = false
-}
-
-const currentWorkspaceRef = computed(() => {
-  return activeTab.value === 'image' ? imageWorkspaceRef : videoWorkspaceRef
-})
-
-const switchTab = (tab) => {
-  activeTab.value = tab
-}
-
-const copyRoomId = async () => {
-  try {
-    await navigator.clipboard.writeText(roomId.value)
-    copySuccess.value = true
-    setTimeout(() => { copySuccess.value = false }, 2000)
-  } catch (err) {
-    console.error('Copy failed:', err)
-  }
-}
-
-const copyShareLink = async () => {
-  try {
-    const shareUrl = `${window.location.origin}${window.location.pathname}?room=${roomId.value}`
-    // 尝试使用现代剪贴板 API
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(shareUrl)
-    } else {
-      // 备用方案：使用传统的 textarea 方式
-      const textArea = document.createElement('textarea')
-      textArea.value = shareUrl
-      textArea.style.position = 'fixed'
-      textArea.style.left = '-999999px'
-      textArea.style.top = '-999999px'
-      document.body.appendChild(textArea)
-      textArea.focus()
-      textArea.select()
-      try {
-        document.execCommand('copy')
-      } catch (fallbackErr) {
-        console.error('Fallback copy failed:', fallbackErr)
-      }
-      document.body.removeChild(textArea)
-    }
-    copySuccess.value = true
-    setTimeout(() => { copySuccess.value = false }, 2000)
-  } catch (err) {
-    console.error('Copy failed:', err)
-    alert('复制失败，请手动复制链接')
-  }
-}
-
-const joinNewRoom = () => {
-  const newRoomId = joinRoomInput.value.trim()
-  if (newRoomId && newRoomId !== roomId.value) {
-    socketManager.joinRoom(newRoomId)
-    roomId.value = newRoomId
-    joinRoomInput.value = ''
-    results.value = []
-    historyItems.value = []
-    setTimeout(() => {
-      socketManager.getHistory()
-    }, 500)
-  }
-}
-
-const currentTaskId = ref(null)
-
-const handleGenerate = (params) => {
-  // 记录当前任务ID，用于取消
-  currentTaskId.value = params.task_id || null
-  if (params.type === 'video' || params.duration) {
-    socketManager.generateVideo(params)
-  } else {
-    socketManager.generateImage(params)
-  }
-}
-
-const handleCancel = () => {
-  if (currentTaskId.value) {
-    socketManager.cancelTask(currentTaskId.value, 'video')
-    // 从进度列表中移除
-    progressList.value = progressList.value.filter(p => p.task_id !== currentTaskId.value)
-    currentTaskId.value = null
-  }
-}
-
-const handleCancelTask = (item) => {
-  console.log('取消任务:', item)
-  // 调用真正的取消 API
-  socketManager.cancelTask(item.task_id, item.type)
-  // 从进度列表中移除
-  progressList.value = progressList.value.filter(p => p.task_id !== item.task_id)
-  if (currentTaskId.value === item.task_id) {
-    currentTaskId.value = null
-  }
-}
-
-const handleReEdit = (result) => {
-  // 第一步：先切换标签页
-  activeTab.value = result.type === 'video' ? 'video' : 'image'
-  // 第二步：等待 DOM 更新后调用对应的 handleReEdit
-  setTimeout(() => {
-    const workspace = result.type === 'video' ? videoWorkspaceRef : imageWorkspaceRef
-    if (workspace?.value?.handleReEdit) {
-      workspace.value.handleReEdit(result)
-    }
-  }, 100)
-}
-
-const handleMouseDown = (e) => {
-  isResizing.value = true
-  document.addEventListener('mousemove', handleMouseMove)
-  document.addEventListener('mouseup', handleMouseUp)
-}
-
-const handleMouseMove = (e) => {
-  if (isResizing.value) {
-    const newWidth = e.clientX
-    if (newWidth >= minLeftWidth && newWidth <= maxLeftWidth) {
-      leftPanelWidth.value = newWidth
-    }
-  }
-}
-
-const handleMouseUp = () => {
-  isResizing.value = false
-  document.removeEventListener('mousemove', handleMouseMove)
-  document.removeEventListener('mouseup', handleMouseUp)
-}
-
-const handleConnect = () => {
-  isConnected.value = true
-  // 等待一小会儿，确保joined房间后再获取历史记录
-  setTimeout(() => {
-    socketManager.getHistory()
-  }, 300)
-}
-
-const handleDisconnect = () => {
-  isConnected.value = false
-}
-
-const handleUserJoined = (data) => {
-}
-
-const handleUserLeft = (data) => {
-}
-
-const handleRoomMembers = (data) => {
-  roomMembers.value = data.members
-}
-
-const handleProgress = (data) => {
-  // 查找是否已有这个任务的进度
-  const existingIndex = progressList.value.findIndex(p => p.task_id === data.task_id)
-  if (existingIndex !== -1) {
-    // 更新已有进度
-    progressList.value[existingIndex] = { ...data }
-  } else {
-    // 添加新进度
-    progressList.value.push({ ...data })
-  }
-}
-
-const handleImageCompleted = (data) => {
-  results.value.unshift(data)
-  if (results.value.length > MAX_RESULTS) {
-    results.value = results.value.slice(0, MAX_RESULTS)
-  }
-  progressList.value = progressList.value.filter(p => p.task_id !== data.task_id)
-  socketManager.getHistory()
-}
-
-const handleVideoCompleted = (data) => {
-  results.value.unshift(data)
-  if (results.value.length > MAX_RESULTS) {
-    results.value = results.value.slice(0, MAX_RESULTS)
-  }
-  progressList.value = progressList.value.filter(p => p.task_id !== data.task_id)
-  socketManager.getHistory()
-}
-
-const handleHistoryData = (data) => {
-  historyItems.value = data.history
-  if (data.history.length > 0) {
-    results.value = data.history.slice(0, MAX_RESULTS)
-  }
-}
-
-const getHistoryDisplayUrl = (item) => {
-  // 历史记录：优先用本地URL，失败时浏览器会自动显示错误，然后我们可以通过 onerror 处理
-  const displayUrl = item.url || item.remote_url
-  return displayUrl.startsWith('/') ? `${window.location.origin}${displayUrl}` : displayUrl
-}
-
-const handleHistoryImageError = (event, item) => {
-  // 如果本地图片加载失败，尝试使用远程URL
-  if (item.remote_url && event.target.src !== item.remote_url) {
-    event.target.src = item.remote_url
-  }
-}
-
-const handleTaskCancelled = (data) => {
-  console.log('任务已取消:', data)
-  // 从进度列表中移除已取消的任务
-  progressList.value = progressList.value.filter(p => p.task_id !== data.task_id)
-  if (data.task_id === currentTaskId.value) {
-    currentTaskId.value = null
-  }
-}
-
-const toggleSidePanel = (panel) => {
-  if (showSidePanel.value && activeSidePanel.value === panel) {
-    showSidePanel.value = false
-  } else {
-    showSidePanel.value = true
-    activeSidePanel.value = panel
-    // 如果打开聊天面板，获取聊天历史并清除未读
-    if (panel === 'chat') {
-      socketManager.getChatHistory()
-      unreadMessages.value = 0
-    }
-    // 如果打开模板面板，清空搜索词
-    if (panel === 'templates') {
-      templatePanelSearch.value = ''
-    }
-  }
-}
-
-const handleSendChatMessage = () => {
-  const message = chatInput.value.trim()
-  if (message) {
-    socketManager.sendChatMessage(message)
-    chatInput.value = ''
-  }
-}
-
-const handleChatMessage = (message) => {
-  chatMessages.value.push(message)
-  // 如果不是自己的消息，并且聊天面板未打开，则增加未读计数
-  if (message.user_id !== userId.value && 
-      !(showSidePanel.value && activeSidePanel.value === 'chat')) {
-    unreadMessages.value++
-  }
-  nextTick(() => {
-    if (chatMessagesRef.value) {
-      chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight
-    }
-  })
-}
-
-const handleChatHistory = (data) => {
-  chatMessages.value = data.chat || []
-  nextTick(() => {
-    if (chatMessagesRef.value) {
-      chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight
-    }
-  })
-}
-
-const formatTime = (isoString) => {
-  const date = new Date(isoString)
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
-
-const handleSelectTemplate = (template) => {
-  // 选择当前激活的工作区
-  const currentWorkspace = activeTab.value === 'image' ? imageWorkspaceRef.value : videoWorkspaceRef.value
-  if (currentWorkspace && currentWorkspace.setPrompt) {
-    currentWorkspace.setPrompt(template.content)
-  }
-}
-
 const handleFiveTVClick = () => {
-  // 直接进入Five TV
   showFiveTV.value = true
 }
 
@@ -524,49 +153,44 @@ const handleExitFiveTV = () => {
   showFiveTV.value = false
 }
 
-const _socketHandlers = {}
+const handleSelectTemplate = (template) => {
+  const currentWorkspace = activeTab.value === 'image' ? imageWorkspaceRef.value : videoWorkspaceRef.value
+  if (currentWorkspace && currentWorkspace.setPrompt) {
+    currentWorkspace.setPrompt(template.content)
+  }
+}
+
+const onJoinNewRoom = () => {
+  joinNewRoom({ results, historyItems })
+}
+
+const { registerSocketListeners, unregisterSocketListeners } = useSocketEvents({
+  handleUserJoined,
+  handleUserLeft,
+  handleRoomMembers,
+  handleConnect,
+  handleDisconnect,
+  handleProgress,
+  handleImageCompleted,
+  handleVideoCompleted,
+  handleHistoryData,
+  handleTaskCancelled,
+  registerTemplateEvents: registerTemplateSocketEvents,
+  registerChatEvents: registerChatSocketEvents,
+  unregisterTemplateEvents: unregisterTemplateSocketEvents,
+  unregisterChatEvents: unregisterChatSocketEvents,
+})
 
 onMounted(() => {
-  _socketHandlers.connected = (data) => {
-    userId.value = data.user_id
-    getTemplates()
-  }
-  _socketHandlers.user_joined = handleUserJoined
-  _socketHandlers.user_left = handleUserLeft
-  _socketHandlers.room_members = handleRoomMembers
-  _socketHandlers.pong = () => {}
-  _socketHandlers.test_message = () => {}
-  _socketHandlers.generation_progress = handleProgress
-  _socketHandlers.image_completed = handleImageCompleted
-  _socketHandlers.video_completed = handleVideoCompleted
-  _socketHandlers.history_data = handleHistoryData
-  _socketHandlers.task_cancelled = handleTaskCancelled
-  _socketHandlers.connect = handleConnect
-  _socketHandlers.disconnect = handleDisconnect
-  _socketHandlers.chat_message = handleChatMessage
-  _socketHandlers.chat_history = handleChatHistory
-
-  _socketHandlers.templates_list = (data) => {
-    templates.value = data.templates || []
-  }
-  _socketHandlers.template_error = (data) => {
-    alert('模版操作失败: ' + data.error)
-  }
-
-  Object.entries(_socketHandlers).forEach(([event, handler]) => {
-    socketManager.on(event, handler)
-  })
-
-  socketManager.connect()
+  registerSocketListeners(
+    (id) => { userId.value = id },
+    getTemplates
+  )
 })
 
 onUnmounted(() => {
-  Object.entries(_socketHandlers).forEach(([event, handler]) => {
-    socketManager.off(event, handler)
-  })
-  socketManager.disconnect()
-  document.removeEventListener('mousemove', handleMouseMove)
-  document.removeEventListener('mouseup', handleMouseUp)
+  unregisterSocketListeners()
+  cleanupResize()
 })
 </script>
 
@@ -636,10 +260,10 @@ onUnmounted(() => {
             v-model="joinRoomInput" 
             type="text" 
             placeholder="输入房间ID..."
-            @keyup.enter="joinNewRoom"
+            @keyup.enter="onJoinNewRoom"
             class="join-input"
           />
-          <button @click="joinNewRoom" class="btn btn-small btn-primary">
+          <button @click="onJoinNewRoom" class="btn btn-small btn-primary">
             加入
           </button>
         </div>
@@ -1014,7 +638,6 @@ onUnmounted(() => {
   box-shadow: 0 4px 15px rgba(155, 89, 182, 0.3);
 }
 
-/* Five TV 按钮样式 - 和逆向解析一样，永远不点亮 */
 .tab-btn.five-tv-btn {
   background: #2a2a4a;
   border-color: #6c3483;
@@ -1027,7 +650,6 @@ onUnmounted(() => {
   color: #fff;
 }
 
-/* 强制确保 Five TV 按钮永远不会有点亮状态 */
 .tab-btn.five-tv-btn.active {
   background: #2a2a4a !important;
   border-color: #6c3483 !important;
@@ -1441,7 +1063,6 @@ onUnmounted(() => {
   }
 }
 
-/* 模版面板样式 */
 .template-panel {
   height: 100%;
   display: flex;
@@ -1559,7 +1180,6 @@ onUnmounted(() => {
   transform: translateX(1px);
 }
 
-/* 收藏面板样式 */
 .favorites-panel {
   height: 100%;
   display: flex;
@@ -1659,7 +1279,6 @@ onUnmounted(() => {
   font-size: 0.95rem;
 }
 
-/* 模版编辑弹窗样式需要的基础样式 */
 .template-input {
   width: 100%;
   padding: 8px 12px;
@@ -1718,7 +1337,6 @@ onUnmounted(() => {
   font-size: 0.95rem;
 }
 
-/* 模版编辑弹窗 */
 .template-editor-modal {
   position: fixed;
   top: 0;

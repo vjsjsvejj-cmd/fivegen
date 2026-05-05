@@ -47,23 +47,31 @@ export function useRoom({ toast }) {
     }
   }
 
-  const joinNewRoom = () => {
+  const joinNewRoom = ({ results, historyItems }) => {
     const newRoomId = joinRoomInput.value.trim()
     if (newRoomId && newRoomId !== roomId.value) {
       socketManager.joinRoom(newRoomId)
       roomId.value = newRoomId
       joinRoomInput.value = ''
+      results.value = []
+      historyItems.value = []
+      setTimeout(() => {
+        socketManager.getHistory()
+      }, 500)
     }
   }
 
-  const handleUserJoined = (data) => {}
-  const handleUserLeft = (data) => {}
+  const handleUserJoined = () => {}
+  const handleUserLeft = () => {}
   const handleRoomMembers = (data) => {
     roomMembers.value = data.members
   }
 
   const handleConnect = () => {
     isConnected.value = true
+    setTimeout(() => {
+      socketManager.getHistory()
+    }, 300)
   }
 
   const handleDisconnect = () => {

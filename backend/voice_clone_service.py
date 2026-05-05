@@ -159,7 +159,7 @@ class VoiceCloneService:
         if progress_callback and task_id:
             await progress_callback(task_id, 10)
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None,
             lambda: cls._request_with_retry("POST", url, json=payload)
@@ -199,7 +199,7 @@ class VoiceCloneService:
         while attempt < max_attempts:
             attempt += 1
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 response = await loop.run_in_executor(
                     None,
                     lambda: cls._request_with_retry("GET", url, max_retries=3)

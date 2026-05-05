@@ -1,12 +1,12 @@
 
 
-#  Five Gen 2.4.3 - AI 图像与视频生成平台
+#  Five Gen 2.5 - AI 图像与视频生成平台
 
 一个基于 FastAPI + Vue 3 的 AI 图像和视频生成协作平台，内置可视化节点编辑器（Canvas），支持拖拽式连接创作，提供直观的工作流设计体验。
 
 ## 📋 版本特性
 
-**Five Gen 2.4.3** - 可视化节点编辑器版（2026-05-05）
+**Five Gen 2.5** - 可视化节点编辑器版（2026-05-05）
 
 新增功能：
 - 📺 **Canvas 可视化节点编辑器** - 全新拖拽式连接创作方式
@@ -268,8 +268,8 @@ TOS_SECRET_KEY=your-key-here
 
 ## 📋 更新日志
 
-### v2.4.3 (2026-05-05) - Five Gen 2.4.3
-- ✅ 项目正式更名为 Five Gen 2.4.3
+### v2.5 (2026-05-05) - Five Gen 2.5
+- ✅ 项目正式更名为 Five Gen 2.5
 - ✅ 后端 CORS 安全配置（默认值从 * 改为 http://localhost:3000）
 - ✅ 后端同步阻塞修复（asyncio.to_thread 包装 requests 调用）
 - ✅ JSON 文件原子写入（tempfile + os.replace 防止数据损坏）

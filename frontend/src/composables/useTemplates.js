@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import socketManager from '../utils/socket'
 
-const defaultTemplates = [
+export const defaultTemplates = [
   { id: 'template_1', name: 'Slogan', content: '「文字内容」+「出现时机」+「出现位置」+「出现方式」，「文字特征（颜色、风格）」', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
   { id: 'template_2', name: '字幕', content: '画面底部出现字幕，字幕内容为"……"，字幕需与音频节奏完全同步。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },
   { id: 'template_3', name: '气泡台词', content: '「角色」说："……"，角色话说时周围出现气泡，气泡里写着台词。', fullWidth: false, created_at: Date.now(), updated_at: Date.now() },

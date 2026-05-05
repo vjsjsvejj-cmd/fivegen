@@ -60,7 +60,7 @@ class DigitalHumanService:
         if progress_callback and task_id:
             await progress_callback(task_id, 10)
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, cls._post_sync, url, payload, headers)
 
         logger.info(f"数字人生成请求响应: {json.dumps(result, ensure_ascii=False)}")
@@ -102,7 +102,7 @@ class DigitalHumanService:
         while attempt < max_attempts:
             attempt += 1
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 result = await loop.run_in_executor(None, cls._get_sync, url, headers)
 
                 consecutive_errors = 0
