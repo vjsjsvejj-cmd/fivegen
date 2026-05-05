@@ -636,6 +636,12 @@ const handleClick = () => {
   }
 }
 
+const openResultUrl = () => {
+  if (!generatedResult.value) return
+  const url = generatedResult.value.remote_url || generatedResult.value.url
+  if (url) window.open(url)
+}
+
 watch(() => activeOutputPanelId.value, (val) => {
   if (val !== props.id) {
     showPanel.value = false
@@ -697,7 +703,7 @@ onMounted(() => {
           v-if="generatedResult.type === 'image'"
           :src="generatedResult.url"
           alt="Generated"
-          @click.stop="() => window.open(generatedResult.remote_url || generatedResult.url)"
+          @click.stop="openResultUrl"
         />
         <video
           v-else

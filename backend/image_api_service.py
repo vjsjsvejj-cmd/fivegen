@@ -4,6 +4,7 @@
 import requests
 import asyncio
 import logging
+from collections import OrderedDict
 from typing import Dict, List, Optional, Callable, Any
 from config import Config
 import json
@@ -38,7 +39,8 @@ class ImageAPIService:
     ]
     
     task_id_map = {}
-    cancelled_tasks = set()
+    cancelled_tasks = OrderedDict()
+    MAX_CANCELLED_TASKS = 1000
     
     # 🟡 新增：公共方法 - 构建 GRSAI 通用 payload
     @classmethod
@@ -527,7 +529,7 @@ class ImageAPIService:
             try:
                 if task_id and task_id in cls.cancelled_tasks:
                     logger.info(f"🚫 任务已被取消: {task_id}")
-                    cls.cancelled_tasks.discard(task_id)
+                    cls.cancelled_tasks.pop(task_id, None)
                     if task_id in cls.task_id_map:
                         del cls.task_id_map[task_id]
                     raise PermanentTaskFailure("Task cancelled by user")
@@ -616,7 +618,9 @@ class ImageAPIService:
         """取消视频任务"""
         logger.info(f"🚫 请求取消视频任务: {task_id}")
         
-        cls.cancelled_tasks.add(task_id)
+        cls.cancelled_tasks[task_id] = True
+        while len(cls.cancelled_tasks) > cls.MAX_CANCELLED_TASKS:
+            cls.cancelled_tasks.popitem(last=False)
         logger.info(f"🔖 标记任务为已取消: {task_id}")
         
         task_id_from_api = cls.task_id_map.get(task_id)

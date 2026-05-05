@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, markRaw, onMounted, onUnmounted, provide, computed, watch, nextTick } from 'vue'
+import { ref, reactive, markRaw, h, onMounted, onUnmounted, provide, computed, watch, nextTick } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -12,7 +12,9 @@ import OutputNode from './OutputNode.vue'
 
 const GhostTargetNode = {
   name: 'GhostTarget',
-  template: '<div style="width:0;height:0;pointer-events:none;position:absolute"></div>'
+  render() {
+    return h('div', { style: 'width:0;height:0;pointer-events:none;position:absolute' })
+  }
 }
 
 import { NODE_COLORS, THEME } from './fivetv-theme'

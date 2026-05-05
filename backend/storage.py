@@ -68,6 +68,9 @@ def save_history(history):
     _atomic_write_json(HISTORY_FILE, history)
 
 
+MAX_HISTORY_ITEMS = 500
+MAX_CHAT_ITEMS = 1000
+
 def add_to_history(item):
     with _history_lock:
         history = load_history()
@@ -75,6 +78,8 @@ def add_to_history(item):
         if 'created_at' not in item:
             item['created_at'] = datetime.now().isoformat()
         history.append(item)
+        if len(history) > MAX_HISTORY_ITEMS:
+            history = history[-MAX_HISTORY_ITEMS:]
         save_history(history)
     return item
 
@@ -108,6 +113,8 @@ def add_chat_message(message):
         message['id'] = len(chat) + 1
         message['created_at'] = datetime.now().isoformat()
         chat.append(message)
+        if len(chat) > MAX_CHAT_ITEMS:
+            chat = chat[-MAX_CHAT_ITEMS:]
         save_chat(chat)
     return message
 
@@ -273,12 +280,13 @@ def download_and_save_media(url, media_type='image', index=None, upload_to_tos=T
         # 🟡 修改：使用 Config 中的配置，区分图片和视频的超时时间
         timeout = Config.IMAGE_DOWNLOAD_TIMEOUT if media_type == 'image' else Config.VIDEO_DOWNLOAD_TIMEOUT
         logger.debug(f"📥 正在下载 {media_type}，超时时间: {timeout} 秒")
-        response = requests.get(url, timeout=timeout)
+        response = requests.get(url, timeout=timeout, stream=True)
         response.raise_for_status()
-        
-        # 保存到本地
+
         with open(filepath, 'wb') as f:
-            f.write(response.content)
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
         
         logger.info("媒体文件已保存到本地: %s", filepath)
         
@@ -347,12 +355,13 @@ def download_media_local_only(url, media_type='image', index=None):
         # 下载文件
         timeout = Config.IMAGE_DOWNLOAD_TIMEOUT if media_type == 'image' else Config.VIDEO_DOWNLOAD_TIMEOUT
         logger.debug(f"📥 正在下载 {media_type}（仅本地），超时时间: {timeout} 秒")
-        response = requests.get(url, timeout=timeout)
+        response = requests.get(url, timeout=timeout, stream=True)
         response.raise_for_status()
-        
-        # 保存到本地
+
         with open(filepath, 'wb') as f:
-            f.write(response.content)
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
         
         logger.info("媒体文件已保存到本地: %s", filepath)
         

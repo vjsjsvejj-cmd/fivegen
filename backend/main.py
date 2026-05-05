@@ -57,7 +57,7 @@ def temporary_file(file_path):
         except Exception as e:
             logger.warning(f"清理临时文件失败: {e}")
 
-app = FastAPI(title="Five Gen 2.4.3", version="2.4.3")
+app = FastAPI(title="Five Gen 2.4.5", version="2.4.5")
 
 # 创建静态文件目录
 static_dir = os.path.join(os.path.dirname(__file__), "static")
@@ -147,7 +147,7 @@ else:
 
 @app.get("/")
 async def root():
-    return {"message": "Five Gen 2.4.3 API", "status": "online"}
+    return {"message": "Five Gen 2.4.5 API", "status": "online"}
 
 
 @app.get("/health")
@@ -183,28 +183,29 @@ async def upload_file(
     """
     temp_path = None
     try:
-        # 读取文件内容
-        content = await file.read()
-        file_size = len(content)
-
-        # 获取文件信息
         original_name = file.filename or "unknown.bin"
         mime_type = file.content_type or "application/octet-stream"
         category = get_category_from_mime(mime_type)
-        
-        # 使用序号，如果没有则默认1
         file_index = index or 1
-        
-        # 生成新文件名
         new_filename = format_upload_filename(original_name, file_index)
         display_name = get_display_name(category, file_index, original_name)
         short_code = get_short_code(category, file_index)
 
-        # 保存到临时文件
         temp_path = os.path.join(UPLOAD_DIR, new_filename)
 
-        with open(temp_path, "wb") as f:
-            f.write(content)
+        try:
+            with open(temp_path, "wb") as f:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+        except IOError as e:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise HTTPException(status_code=500, detail=f"文件写入失败: {e}")
+
+        file_size = os.path.getsize(temp_path)
 
         logger.info(f"File received: {original_name} -&gt; {new_filename} ({file_size} bytes)")
 
@@ -268,13 +269,18 @@ async def analyze_media(file: UploadFile = File(...), template: Optional[str] = 
     """
     temp_file_path = None
     try:
-        # 保存上传的文件到临时位置
         ext = os.path.splitext(file.filename or 'file')[1]
         temp_file_path = os.path.join(UPLOAD_DIR, f"inversion_{uuid.uuid4()}{ext}")
-        
-        content = await file.read()
-        with open(temp_file_path, 'wb') as f:
-            f.write(content)
+
+        try:
+            with open(temp_file_path, 'wb') as f:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+        except IOError as e:
+            raise HTTPException(status_code=500, detail=f"文件写入失败: {e}")
         
         # 判断文件类型
         is_video = file.content_type and file.content_type.startswith('video/')
@@ -484,14 +490,24 @@ async def voice_clone_upload_audio(file: UploadFile = File(...)):
     """上传参考音频文件到智谱AI"""
     temp_path = None
     try:
-        content = await file.read()
         original_name = file.filename or "audio.wav"
         temp_path = os.path.join(UPLOAD_DIR, f"voice_ref_{uuid.uuid4()}{os.path.splitext(original_name)[1]}")
 
-        with open(temp_path, "wb") as f:
-            f.write(content)
+        file_size = 0
+        try:
+            with open(temp_path, "wb") as f:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    file_size += len(chunk)
+        except IOError as e:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise HTTPException(status_code=500, detail=f"文件写入失败: {e}")
 
-        logger.info(f"声音克隆-上传参考音频: {original_name} ({len(content)} bytes)")
+        logger.info(f"声音克隆-上传参考音频: {original_name} ({file_size} bytes)")
 
         result = await asyncio.to_thread(VoiceCloneService.upload_audio_file, temp_path, original_name)
 
@@ -568,15 +584,25 @@ async def digital_human_upload_image(file: UploadFile = File(...)):
     """上传数字人图片"""
     temp_path = None
     try:
-        content = await file.read()
         original_name = file.filename or "image.jpg"
         ext = os.path.splitext(original_name)[1]
         temp_path = os.path.join(UPLOAD_DIR, f"dh_img_{uuid.uuid4()}{ext}")
 
-        with open(temp_path, "wb") as f:
-            f.write(content)
+        file_size = 0
+        try:
+            with open(temp_path, "wb") as f:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    file_size += len(chunk)
+        except IOError as e:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise HTTPException(status_code=500, detail=f"文件写入失败: {e}")
 
-        logger.info(f"数字人-上传图片: {original_name} ({len(content)} bytes)")
+        logger.info(f"数字人-上传图片: {original_name} ({file_size} bytes)")
 
         public_url = None
         if Config.is_tos_enabled():
@@ -600,7 +626,7 @@ async def digital_human_upload_image(file: UploadFile = File(...)):
             "success": True,
             "url": public_url,
             "originalName": original_name,
-            "size": len(content)
+            "size": file_size
         })
 
     except Exception as e:
@@ -619,15 +645,25 @@ async def digital_human_upload_audio(file: UploadFile = File(...)):
     """上传数字人音频"""
     temp_path = None
     try:
-        content = await file.read()
         original_name = file.filename or "audio.wav"
         ext = os.path.splitext(original_name)[1]
         temp_path = os.path.join(UPLOAD_DIR, f"dh_aud_{uuid.uuid4()}{ext}")
 
-        with open(temp_path, "wb") as f:
-            f.write(content)
+        file_size = 0
+        try:
+            with open(temp_path, "wb") as f:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    file_size += len(chunk)
+        except IOError as e:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise HTTPException(status_code=500, detail=f"文件写入失败: {e}")
 
-        logger.info(f"数字人-上传音频: {original_name} ({len(content)} bytes)")
+        logger.info(f"数字人-上传音频: {original_name} ({file_size} bytes)")
 
         public_url = None
         if Config.is_tos_enabled():
@@ -651,7 +687,7 @@ async def digital_human_upload_audio(file: UploadFile = File(...)):
             "success": True,
             "url": public_url,
             "originalName": original_name,
-            "size": len(content)
+            "size": file_size
         })
 
     except Exception as e:
@@ -696,10 +732,15 @@ async def digital_human_generate(request: DigitalHumanRequest):
                 video_filename = f"dh_{uuid.uuid4().hex[:8]}.mp4"
                 video_path = os.path.join(video_dir, video_filename)
 
-                download_response = await asyncio.to_thread(requests.get, video_url, timeout=Config.VIDEO_DOWNLOAD_TIMEOUT)
-                download_response.raise_for_status()
-                with open(video_path, 'wb') as f:
-                    f.write(download_response.content)
+                def _stream_download(url, path, timeout):
+                    resp = requests.get(url, timeout=timeout, stream=True)
+                    resp.raise_for_status()
+                    with open(path, 'wb') as f:
+                        for chunk in resp.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+
+                await asyncio.to_thread(_stream_download, video_url, video_path, Config.VIDEO_DOWNLOAD_TIMEOUT)
 
                 video_url = f"/local-media/videos/{video_filename}"
                 logger.info(f"数字人视频已保存: {video_url}")

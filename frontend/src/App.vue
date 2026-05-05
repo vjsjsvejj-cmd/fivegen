@@ -51,6 +51,8 @@ const handleInversionApply = (result) => {
   }
 }
 
+const MAX_RESULTS = 200
+
 const results = ref([])
 const historyItems = ref([])
 const progressList = ref([])
@@ -406,23 +408,26 @@ const handleProgress = (data) => {
 
 const handleImageCompleted = (data) => {
   results.value.unshift(data)
-  // 从进度列表中移除已完成的任务
+  if (results.value.length > MAX_RESULTS) {
+    results.value = results.value.slice(0, MAX_RESULTS)
+  }
   progressList.value = progressList.value.filter(p => p.task_id !== data.task_id)
   socketManager.getHistory()
 }
 
 const handleVideoCompleted = (data) => {
   results.value.unshift(data)
-  // 从进度列表中移除已完成的任务
+  if (results.value.length > MAX_RESULTS) {
+    results.value = results.value.slice(0, MAX_RESULTS)
+  }
   progressList.value = progressList.value.filter(p => p.task_id !== data.task_id)
   socketManager.getHistory()
 }
 
 const handleHistoryData = (data) => {
   historyItems.value = data.history
-  // 同时也把历史数据加载到结果展示区
   if (data.history.length > 0) {
-    results.value = [...data.history]
+    results.value = data.history.slice(0, MAX_RESULTS)
   }
 }
 
@@ -519,41 +524,46 @@ const handleExitFiveTV = () => {
   showFiveTV.value = false
 }
 
+const _socketHandlers = {}
+
 onMounted(() => {
-  // 先注册所有监听器
-  socketManager.on('connected', (data) => {
+  _socketHandlers.connected = (data) => {
     userId.value = data.user_id
-    // 连接成功后获取模版列表
     getTemplates()
-  })
-  socketManager.on('user_joined', handleUserJoined)
-  socketManager.on('user_left', handleUserLeft)
-  socketManager.on('room_members', handleRoomMembers)
-  socketManager.on('pong', () => {})
-  socketManager.on('test_message', () => {})
-  socketManager.on('generation_progress', handleProgress)
-  socketManager.on('image_completed', handleImageCompleted)
-  socketManager.on('video_completed', handleVideoCompleted)
-  socketManager.on('history_data', handleHistoryData)
-  socketManager.on('task_cancelled', handleTaskCancelled)
-  socketManager.on('connect', handleConnect)
-  socketManager.on('disconnect', handleDisconnect)
-  socketManager.on('chat_message', handleChatMessage)
-  socketManager.on('chat_history', handleChatHistory)
-  
-  // 模版相关事件
-  socketManager.on('templates_list', (data) => {
+  }
+  _socketHandlers.user_joined = handleUserJoined
+  _socketHandlers.user_left = handleUserLeft
+  _socketHandlers.room_members = handleRoomMembers
+  _socketHandlers.pong = () => {}
+  _socketHandlers.test_message = () => {}
+  _socketHandlers.generation_progress = handleProgress
+  _socketHandlers.image_completed = handleImageCompleted
+  _socketHandlers.video_completed = handleVideoCompleted
+  _socketHandlers.history_data = handleHistoryData
+  _socketHandlers.task_cancelled = handleTaskCancelled
+  _socketHandlers.connect = handleConnect
+  _socketHandlers.disconnect = handleDisconnect
+  _socketHandlers.chat_message = handleChatMessage
+  _socketHandlers.chat_history = handleChatHistory
+
+  _socketHandlers.templates_list = (data) => {
     templates.value = data.templates || []
-  })
-  socketManager.on('template_error', (data) => {
+  }
+  _socketHandlers.template_error = (data) => {
     alert('模版操作失败: ' + data.error)
+  }
+
+  Object.entries(_socketHandlers).forEach(([event, handler]) => {
+    socketManager.on(event, handler)
   })
-  
-  // 然后再连接
+
   socketManager.connect()
 })
 
 onUnmounted(() => {
+  Object.entries(_socketHandlers).forEach(([event, handler]) => {
+    socketManager.off(event, handler)
+  })
   socketManager.disconnect()
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('mouseup', handleMouseUp)
@@ -569,7 +579,7 @@ onUnmounted(() => {
     <template v-else>
       <header class="app-header">
         <div class="header-left">
-          <h1 class="logo">🎨 Five Gen 2.4.3</h1>
+          <h1 class="logo">🎨 Five Gen 2.4.5</h1>
           <div class="tab-bar">
             <button 
               :class="['tab-btn', { active: activeTab === 'image' }]"
